@@ -1,15 +1,17 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
+// Define SITE_URL at the module level
+const SITE_URL = window.location.origin;
+
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   isLoading: boolean;
-  signInWithPassword: (email: string, pass: string) => Promise<any>; // Simplified, expand later
-  signUpNewUser: (email: string, pass: string, fullName?: string) => Promise<any>; // Simplified
+  signInWithPassword: (email: string, pass: string) => Promise<any>;
+  signUpNewUser: (email: string, pass: string, fullName?: string) => Promise<any>;
   signOut: () => Promise<void>;
   signInWithGitHub: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -25,24 +27,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
       setIsLoading(false);
     };
 
     getSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      async (_event, currentSession) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
         setIsLoading(false);
         if (_event === 'PASSWORD_RECOVERY') {
-          // Handle password recovery navigation if needed, e.g., redirect to a reset password page.
-          // For now, you might navigate to a specific route.
-          // Example: navigate('/reset-password'); // Ensure this route exists
+          // Handle password recovery navigation if needed
+          // Example: navigate('/reset-password');
         }
+        // Optional: handle signed_in event for OAuth if needed for specific navigation
+        // if (_event === "SIGNED_IN" && currentSession) {
+        //   navigate('/profile'); // Or wherever appropriate after OAuth sign-in
+        // }
       }
     );
 
@@ -61,21 +66,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUpNewUser = async (email: string, pass: string, fullName?: string) => {
     setIsLoading(true);
-    // Note: Supabase by default might not directly take 'fullName' in signUp.
-    // It's typically stored in a separate 'profiles' table linked by user_id.
-    // For now, we'll pass it as metadata if needed, or you'll handle profile creation separately.
     const { data, error } = await supabase.auth.signUp({
       email,
       password: pass,
       options: {
         data: {
-          full_name: fullName, // This gets stored in auth.users.raw_user_meta_data
-        }
+          full_name: fullName,
+        },
+        emailRedirectTo: SITE_URL, // Use dynamic site URL for email confirmation
       }
     });
     setIsLoading(false);
     if (error) throw error;
-    // Typically, Supabase sends a confirmation email. You might want to show a message to the user.
     return data;
   };
   
@@ -93,7 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: {
-        redirectTo: window.location.origin + '/auth/callback', // Adjust if your callback path is different
+        redirectTo: SITE_URL + '/auth/callback', // Use dynamic site URL + callback path
       },
     });
     setIsLoading(false);
@@ -105,13 +107,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin + '/auth/callback', // Adjust if your callback path is different
+        redirectTo: SITE_URL + '/auth/callback', // Use dynamic site URL + callback path
       },
     });
     setIsLoading(false);
     if (error) console.error('Google sign-in error:', error.message);
   };
-
 
   const value = {
     session,

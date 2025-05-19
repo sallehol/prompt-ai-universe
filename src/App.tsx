@@ -1,6 +1,6 @@
 
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as SonnerToaster } from "@/components/ui/sonner"; // Renamed to avoid conflict
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -10,12 +10,13 @@ import IndexPage from "./pages/Index";
 import ModelCatalogPage from "./pages/ModelCatalogPage";
 import PricingPage from "./pages/PricingPage";
 import NotFound from "./pages/NotFound";
-import UserProfilePage from "./pages/UserProfilePage"; // New
-import ForgotPasswordPage from "./pages/ForgotPasswordPage"; // New
-import ResetPasswordPage from "./pages/ResetPasswordPage"; // New
-import AuthCallbackPage from "./pages/AuthCallbackPage"; // New for OAuth
+import UserProfilePage from "./pages/UserProfilePage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+// import AuthCallbackPage from "./pages/AuthCallbackPage"; // Old import, will be removed
+import AuthCallback from "./components/AuthCallback"; // New import
 
-import { AuthProvider } from "./contexts/AuthContext"; // New
+import { AuthProvider } from "./contexts/AuthContext";
 
 const queryClient = new QueryClient();
 
@@ -23,22 +24,21 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <SonnerToaster /> {/* Use renamed import */}
+      <SonnerToaster />
       <BrowserRouter>
-        <AuthProvider> {/* AuthProvider wraps routes */}
+        <AuthProvider>
           <Routes>
             <Route element={<Layout />}>
               <Route path="/" element={<IndexPage />} />
               <Route path="/models" element={<ModelCatalogPage />} />
               <Route path="/pricing" element={<PricingPage />} />
-              <Route path="/profile" element={<UserProfilePage />} /> 
-              {/* ADD ALL CUSTOM ROUTES INSIDE LAYOUT ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="/profile" element={<UserProfilePage />} />
               <Route path="*" element={<NotFound />} />
             </Route>
-            {/* Routes outside main Layout (e.g. for full screen auth pages if needed) */}
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/auth/callback" element={<AuthCallbackPage />} />
+            {/* Use the new AuthCallback component */}
+            <Route path="/auth/callback" element={<AuthCallback />} /> 
           </Routes>
         </AuthProvider>
       </BrowserRouter>
@@ -47,3 +47,4 @@ const App = () => (
 );
 
 export default App;
+
