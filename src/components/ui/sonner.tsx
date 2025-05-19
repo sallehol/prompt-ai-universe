@@ -1,14 +1,17 @@
-import { useTheme } from "next-themes"
-import { Toaster as Sonner, toast } from "sonner"
 
-type ToasterProps = React.ComponentProps<typeof Sonner>
+// import { useTheme } from "next-themes" // Removed next-themes as it's not standard in Vite/React unless specifically added
+import { Toaster as SonnerPrimitive, toast } from "sonner" // Renamed import to SonnerPrimitive
 
+type ToasterProps = React.ComponentProps<typeof SonnerPrimitive>
+
+// Simplified theme handling for now
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  // const { theme = "system" } = useTheme() // Removed useTheme
+  const currentTheme = "dark"; // Placeholder or use a context if available
 
   return (
-    <Sonner
-      theme={theme as ToasterProps["theme"]}
+    <SonnerPrimitive
+      theme={currentTheme as ToasterProps["theme"]} // Use simplified theme
       className="toaster group"
       toastOptions={{
         classNames: {
