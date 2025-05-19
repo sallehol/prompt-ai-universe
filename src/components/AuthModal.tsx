@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/use-toast'; // Using shadcn toast
 import { Github, ChromeIcon, Mail, Lock, User as UserIcon } from 'lucide-react'; // ChromeIcon for Google
+import { supabase } from '@/lib/supabaseClient'; // <-- ADDED THIS IMPORT
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -64,7 +64,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onOpenChange, initialView
     }
   };
   
-  // Placeholder for forgot password
   const handleForgotPasswordRequest = async (values: { email: string }) => {
     try {
       await supabase.auth.resetPasswordForEmail(values.email, {
@@ -226,7 +225,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onOpenChange, initialView
             </form>
           </Form>
         )}
-
 
         <div className="mt-4 text-center text-sm">
           {view === 'login' && (
