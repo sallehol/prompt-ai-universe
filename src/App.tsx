@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,6 +8,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import IndexPage from "./pages/Index";
 import ModelCatalogPage from "./pages/ModelCatalogPage";
+import CategoryModelsPage from "./pages/CategoryModelsPage"; // Import new page
 import PricingPage from "./pages/PricingPage";
 import ChatPage from "./pages/ChatPage";
 import NotFound from "./pages/NotFound";
@@ -30,6 +32,7 @@ const App = () => (
             <Route element={<Layout />}>
               <Route path="/" element={<IndexPage />} />
               <Route path="/models" element={<ModelCatalogPage />} />
+              <Route path="/models/:categoryKey" element={<CategoryModelsPage />} /> {/* Add new route */}
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/chat" element={<ChatPage />} />
               <Route path="/profile" element={<UserProfilePage />} />

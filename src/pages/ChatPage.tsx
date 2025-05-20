@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useEffect } from 'react';
 import ChatInterface from '@/components/chat/ChatInterface';
 import SessionList from '@/components/chat/SessionList';
 import { useChatSessions } from '@/hooks/useChatSessions';
@@ -10,8 +9,34 @@ import {
   SidebarContent,
   SidebarInset,
 } from "@/components/ui/sidebar";
+import { useSearchParams, Link } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { getModelById } from '@/data/aiModels';
 
 const ChatPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const modelIdFromUrl = searchParams.get('model');
+  const [isValidModelId, setIsValidModelId] = React.useState(true);
+  const [attemptedModelId, setAttemptedModelId] = React.useState<string | null>(null);
+
+  useEffect(() => {
+    if (modelIdFromUrl) {
+      setAttemptedModelId(modelIdFromUrl);
+      const modelExists = getModelById(modelIdFromUrl);
+      if (!modelExists) {
+        setIsValidModelId(false);
+      } else {
+        setIsValidModelId(true);
+      }
+    } else {
+      setIsValidModelId(true);
+      setAttemptedModelId(null);
+    }
+  }, [modelIdFromUrl]);
+
+  const initialModelForHook = modelIdFromUrl && isValidModelId ? modelIdFromUrl : 'gpt-4o-mini';
+
   const {
     sessions,
     activeSession,
@@ -26,10 +51,38 @@ const ChatPage = () => {
     handleSendMessage,
     regenerateResponse,
     toggleSaveMessage,
-  } = useChatSessions('gpt-4o-mini'); // Default model
-  
+  } = useChatSessions(initialModelForHook);
+
   const isMobile = useIsMobile();
-  const selectedModelForActiveSession = activeSession?.modelUsed || 'gpt-4o-mini';
+
+  useEffect(() => {
+    const currentModelIdFromUrl = searchParams.get('model');
+    if (currentModelIdFromUrl && isValidModelId && activeSession) {
+      if (activeSession.modelUsed !== currentModelIdFromUrl) {
+        updateSessionModel(activeSession.id, currentModelIdFromUrl);
+      }
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('model');
+      setSearchParams(newSearchParams, { replace: true });
+    }
+  }, [searchParams, activeSession, updateSessionModel, isValidModelId, setSearchParams]);
+
+  const selectedModelForActiveSession = activeSession?.modelUsed || initialModelForHook;
+
+  if (!isValidModelId && attemptedModelId) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-deep-bg">
+        <AlertCircle className="w-16 h-16 text-destructive mb-4" />
+        <h2 className="text-2xl font-semibold text-light-text mb-2">Invalid Model Specified</h2>
+        <p className="text-medium-text mb-6">
+          The model ID "{attemptedModelId}" from the URL is not recognized.
+        </p>
+        <Button asChild className="bg-neon-cyan text-deep-bg hover:bg-cyan-300">
+          <Link to="/models">Browse Available Models</Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider defaultOpen={!isMobile}>
@@ -59,7 +112,14 @@ const ChatPage = () => {
               currentModel={selectedModelForActiveSession}
               isAiTyping={isAiTyping}
               onSendMessage={handleSendMessage}
-              onSelectModel={(model) => updateSessionModel(activeSession.id, model)}
+              onSelectModel={(modelId) => {
+                updateSessionModel(activeSession.id, modelId);
+                if (searchParams.has('model')) {
+                  const newSearchParams = new URLSearchParams(searchParams);
+                  newSearchParams.delete('model');
+                  setSearchParams(newSearchParams, { replace: true });
+                }
+              }}
               onRegenerateResponse={regenerateResponse}
               onToggleSaveMessage={toggleSaveMessage}
             />
@@ -67,7 +127,7 @@ const ChatPage = () => {
             <div className="flex-1 flex items-center justify-center text-muted-foreground p-4 text-center">
               <div>
                 <p className="mb-2 text-lg font-medium">Select or create a chat to begin.</p>
-                <p className="text-sm">Start a new conversation or continue an existing one.</p>
+                <p className="text-sm">Start a new conversation or continue an existing one with the default model, or pick one from the catalog.</p>
               </div>
             </div>
           )}
