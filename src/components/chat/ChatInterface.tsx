@@ -72,9 +72,9 @@ const ChatInterface = ({
       </div>
 
       {/* Message area with scroll */}
-      <ScrollArea className="flex-grow p-4 md:p-6" ref={scrollAreaRef}>
+      <ScrollArea className="flex-grow p-4 md:p-6 overflow-y-auto" ref={scrollAreaRef}>
         {/* Removed h-full from this div to allow natural content height for scrolling */}
-        <div ref={viewportRef} className="space-y-4 max-w-3xl mx-auto">
+        <div ref={viewportRef} className="space-y-4 max-w-3xl mx-auto pb-2">
           {messages.map((msg) => (
             <ChatMessage
               key={msg.id}
@@ -102,8 +102,7 @@ const ChatInterface = ({
       )}
 
       {/* Message input area - ensuring this is always visible */}
-      {/* Added flex-shrink-0 to prevent this container from shrinking */}
-      <div className="max-w-3xl mx-auto w-full px-4 md:px-6 flex-shrink-0">
+      <div className="max-w-3xl mx-auto w-full px-4 md:px-6 flex-shrink-0 mt-auto pb-4">
         <MessageInput onSendMessage={onSendMessage} />
       </div>
     </div>

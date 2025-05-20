@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom'; // Added Link
+import { Link } from 'react-router-dom';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,15 +11,20 @@ import {
   DropdownMenuGroup
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Info, Search, ExternalLink } from 'lucide-react'; // Added Search, ExternalLink
-import { Input } from '@/components/ui/input'; // Added Input
+import { ChevronDown, Info, Search, ExternalLink } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { allModels, modelCategoryDetails, Model, ModelCategoryInfo, getModelById } from '@/data/aiModels'; // Updated imports
+import { allModels, modelCategoryDetails, Model, getModelById } from '@/data/aiModels';
+
+interface ModelSelectorProps {
+  selectedModel: string;
+  onSelectModel: (modelId: string) => void;
+}
 
 const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorProps) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,8 +32,7 @@ const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorProps) => 
   const getModelDisplayName = () => {
     const model = getModelById(selectedModel);
     if (model) return model.name;
-    // Fallback for models not in the detailed list (e.g. if a session used an old ID)
-    // Or provide a more generic "Select Model" or the ID itself
+    // Fallback for models not in the detailed list
     return selectedModel || "Select Model";
   };
 
@@ -55,6 +59,7 @@ const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorProps) => 
   const displayedModelGroups = filteredAndGroupedModels();
   const categoryOrder = Object.keys(modelCategoryDetails); // To maintain a consistent order
 
+  console.log(`[ModelSelector] Rendering with selectedModel: ${selectedModel}, displayName: ${getModelDisplayName()}`);
 
   return (
     <TooltipProvider>
@@ -66,8 +71,7 @@ const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorProps) => 
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent 
-          className="w-80 bg-popover border-border text-popover-foreground max-h-96 overflow-y-auto p-0" // Added max-h, overflow, p-0
-          // Prevent closing on click inside search input
+          className="w-80 bg-popover border-border text-popover-foreground max-h-96 overflow-y-auto p-0"
           onCloseAutoFocus={(e) => e.preventDefault()} 
         >
           <div className="p-2 sticky top-0 bg-popover z-10 border-b border-border">
@@ -79,14 +83,13 @@ const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorProps) => 
                 className="w-full pl-8 h-9 bg-background text-foreground"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                // Stop propagation to prevent dropdown from closing or other interactions
-                onClick={(e) => e.stopPropagation()} 
+                onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               />
             </div>
           </div>
           
-          <div className="p-1"> {/* Content padding wrapper */}
+          <div className="p-1">
             {categoryOrder.map((categoryKey) => {
               const modelsInGroup = displayedModelGroups[categoryKey];
               const categoryInfo = modelCategoryDetails[categoryKey];
@@ -103,8 +106,9 @@ const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorProps) => 
                       <DropdownMenuItem
                         key={model.id}
                         onSelect={() => {
+                          console.log(`[ModelSelector] Selected model: ${model.id}`);
                           onSelectModel(model.id);
-                          setSearchTerm(''); // Clear search on select
+                          setSearchTerm('');
                         }}
                         className={`flex flex-col items-start p-2 mx-1 rounded-sm ${selectedModel === model.id ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"}`}
                       >
@@ -130,9 +134,8 @@ const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorProps) => 
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuGroup>
-                  {/* Conditional separator if not the last group with content */}
-                  {/* This logic needs to be smarter, perhaps by checking next group */}
-                   <DropdownMenuSeparator className="bg-border mx-1 my-0.5" />
+                  {/* Conditional separator */}
+                  <DropdownMenuSeparator className="bg-border mx-1 my-0.5" />
                 </React.Fragment>
               );
             })}
@@ -153,12 +156,5 @@ const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorProps) => 
     </TooltipProvider>
   );
 };
-
-// Interface for props (if not already defined broadly)
-interface ModelSelectorProps {
-  selectedModel: string;
-  onSelectModel: (modelId: string) => void;
-}
-
 
 export default ModelSelector;

@@ -19,6 +19,16 @@ const MessageInput = ({ onSendMessage }: MessageInputProps) => {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (inputValue.trim()) {
+        onSendMessage(inputValue);
+        setInputValue('');
+      }
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="p-4 border-t border-border bg-deep-bg/50">
       <div className="flex items-center space-x-2">
@@ -27,10 +37,15 @@ const MessageInput = ({ onSendMessage }: MessageInputProps) => {
           placeholder="Type your message..."
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
           className="flex-grow bg-card/70 border-border focus:ring-neon-cyan text-light-text placeholder-medium-text"
           aria-label="Chat message input"
         />
-        <Button type="submit" className="bg-neon-cyan text-deep-bg hover:bg-cyan-300" aria-label="Send message">
+        <Button 
+          type="submit" 
+          className="bg-neon-cyan text-deep-bg hover:bg-cyan-300" 
+          aria-label="Send message"
+        >
           <Send size={18} />
         </Button>
       </div>

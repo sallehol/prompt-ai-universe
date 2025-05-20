@@ -15,23 +15,31 @@ export const useActiveSessionManager = ({
 }: UseActiveSessionManagerProps) => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
+  // This effect runs when sessions are loaded or changed, ensuring we have an active session
   useEffect(() => {
     if (!isLoadingSessions) {
+      console.log(`[useActiveSessionManager] useEffect running with ${persistedSessions.length} sessions, activeSessionId: ${activeSessionId}`);
+      
       if (persistedSessions.length > 0) {
         // If there's an activeSessionId already, check if it's still valid
         const currentActiveIsValid = persistedSessions.some(s => s.id === activeSessionId);
+        
         if (!currentActiveIsValid || !activeSessionId) {
+          // Sort by most recent activity and set the most recent as active
           const sortedSessions = [...persistedSessions].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
           setActiveSessionId(sortedSessions[0].id);
-          console.log(`[useActiveSessionManager] useEffect (sessions loaded): Set activeSessionId to ${sortedSessions[0].id} from ${persistedSessions.length} sessions.`);
+          console.log(`[useActiveSessionManager] Setting activeSessionId to most recent: ${sortedSessions[0].id}`);
+        } else {
+          console.log(`[useActiveSessionManager] Keeping current activeSessionId: ${activeSessionId}`);
         }
       } else {
+        // No sessions exist, create a default one
         const newSessionId = initializeDefaultSessionIfNeeded();
         if (newSessionId) {
           setActiveSessionId(newSessionId);
-          console.log(`[useActiveSessionManager] useEffect (sessions loaded): Initialized and set activeSessionId to ${newSessionId}.`);
+          console.log(`[useActiveSessionManager] Creating default session with ID: ${newSessionId}`);
         } else {
-           console.log(`[useActiveSessionManager] useEffect (sessions loaded): No persisted sessions and no new session initialized.`);
+           console.log(`[useActiveSessionManager] No sessions available and couldn't create default.`);
         }
       }
     }
@@ -48,4 +56,3 @@ export const useActiveSessionManager = ({
     switchSession,
   };
 };
-

@@ -1,4 +1,3 @@
-
 import { useCallback } from 'react';
 import { Session } from '@/types/chat';
 import { createInitialSession, createNewMessage } from '@/lib/chatUtils'; // createNewMessage needed for clearSessionMessages
@@ -80,29 +79,45 @@ export const useSessionMutations = ({
   }, [updateAndPersistSessions]);
 
   const updateSessionModel = useCallback((sessionId: string, model: string) => {
-    console.log(`[useSessionMutations] updateSessionModel: Attempting to update session ${sessionId} to model ${model}`);
+    console.log(`[useSessionMutations] updateSessionModel: Updating session ${sessionId} to model ${model}`);
+    
     updateAndPersistSessions(prev => {
       const newSessions = prev.map(s => {
         if (s.id === sessionId) {
-          console.log(`[useSessionMutations] updateSessionModel: Updating session ${s.id} from ${s.modelUsed} to ${model}`);
-          return { ...s, modelUsed: model, lastActivityAt: Date.now() };
+          console.log(`[useSessionMutations] Found session ${sessionId}, changing model from ${s.modelUsed} to ${model}`);
+          return { 
+            ...s, 
+            modelUsed: model, 
+            lastActivityAt: Date.now() 
+          };
         }
         return s;
       });
+      
+      // Debug log to verify the update happened
       const updatedSession = newSessions.find(s => s.id === sessionId);
       if (updatedSession) {
-        console.log(`[useSessionMutations] updateSessionModel: Session ${sessionId} after update attempt - new modelUsed: ${updatedSession.modelUsed}`);
+        console.log(`[useSessionMutations] After update: session ${sessionId} model is now ${updatedSession.modelUsed}`);
+      } else {
+        console.warn(`[useSessionMutations] Warning: Could not find session ${sessionId} after update attempt`);
       }
+      
       return newSessions;
     });
   }, [updateAndPersistSessions]);
 
   return {
     createSession,
-    renameSession,
+    renameSession: useCallback((sessionId: string, newName: string) => {
+      console.log(`[useSessionMutations] renameSession: ${sessionId} to "${newName}"`);
+      updateAndPersistSessions(prev =>
+        prev.map(session =>
+          session.id === sessionId ? { ...session, name: newName, lastActivityAt: Date.now() } : session
+        )
+      );
+    }, [updateAndPersistSessions]),
     deleteSession,
     clearSessionMessages,
     updateSessionModel,
   };
 };
-
