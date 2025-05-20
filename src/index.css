@@ -29,15 +29,8 @@
     --destructive: 0 72% 51%; /* Default destructive red */
     --destructive-foreground: 210 20% 98%;
 
-    /* User's requested border variables */
-    --border-color: rgba(55, 65, 81, 0.2); 
-    --border-width: 1px;
-
-    /* Update Tailwind's --border to use a solid version of the user's color for default border-border */
-    /* rgb(55, 65, 81) is approx hsl(220, 18%, 26.7%) */
-    --border: 220 18% 26.7%; /* This will be used by 'border-border' */
-
-    --input: 220 9% 30%; /* Retaining original input for now, can be var(--border-color) if needed */
+    --border: 220 9% 30%; /* Tailwind slate-700/slate-800 like */
+    --input: 220 9% 30%;
     --ring: 190 81% 56%; /* neon-cyan */
 
     --radius: 0.5rem;
@@ -48,21 +41,22 @@
     --sidebar-primary-foreground: 220 13% 7%;
     --sidebar-accent: 220 9% 23%;
     --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 220 9% 30%; /* Can be changed to var(--border-color) if sidebar borders should match */
+    --sidebar-border: 220 9% 30%;
     --sidebar-ring: 190 81% 56%;
   }
+
+  /* No need for .dark class if we are dark by default */
 }
 
 @layer base {
   * {
-    /* border-border will use the HSL var(--border) defined above by default */
-    /* If all borders must strictly be var(--border-color), this needs to be more specific */
     @apply border-border;
   }
   html, body {
     @apply bg-background text-foreground;
     font-family: 'Inter', sans-serif; /* A clean, modern font */
   }
+  /* Add a subtle pattern or texture to the background for a more tech feel */
   body::before {
     content: "";
     position: fixed;
@@ -78,20 +72,6 @@
   }
 }
 
-/* Apply specific border color and width for general border classes as per user request */
-/* This will override Tailwind's default border color for these classes */
-.border,
-.border-t,
-.border-r,
-.border-b,
-.border-l {
-  border-color: var(--border-color) !important; /* Use !important to ensure override if needed */
-  border-width: var(--border-width) !important; /* Ensuring width is also applied */
-}
-/* Specific side borders might need individual width if Tailwind's default 1px for sides is not desired */
-/* However, var(--border-width) is 1px, so it aligns with Tailwind's default thickness. */
-
-
 /* Add Google Font Inter */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -103,16 +83,12 @@
 
   .messages-area {
     /* Using inline style for height calc, overflow-y is also inline for now */
+    /* Tailwind's p-4 and space-y-4 will handle padding and message spacing */
   }
 
   .input-area {
-    @apply flex-shrink-0;
-  }
-
-  /* User requested .border-standard class */
-  .border-standard {
-    border-color: var(--border-color);
-    border-width: var(--border-width);
-    border-style: solid;
+    @apply flex-shrink-0; 
+    /* Tailwind classes border-t, p-4, bg-deep-bg handle the rest */
   }
 }
+
