@@ -2,16 +2,19 @@
 // supabase/functions/ai-proxy/index.ts
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { handleCors, verifyAuth, corsHeaders } from './auth.ts'
-import { createErrorResponse, ErrorType } from './error-utils.ts'
-// getProviderFromModel, ProviderName, ProviderType are not used in this version of index.ts yet
-// import { getProviderFromModel, ProviderName, ProviderType } from './providers.ts'
+import { createErrorResponse, ErrorType } from './error-utils.ts' // Removed handleProviderError as it's used in text-models.ts
+import { getProviderFromModel, ProviderName, ProviderType } from './providers.ts' // Keep these, getProviderFromModel might be useful generally
 import { 
   listProviders, 
   checkApiKeyStatus, 
   setApiKey, 
   deleteApiKey
-  // getApiKeyInternal is not an endpoint, so not imported here for routing
+  // getApiKeyInternal is not imported here as it's used by text-models.ts
 } from './api-keys.ts'
+import {
+  handleTextCompletion,
+  handleChatCompletion
+} from './text-models.ts' // New import
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -19,32 +22,27 @@ serve(async (req) => {
   if (corsResponse) return corsResponse
   
   try {
-    // Parse the URL to determine which endpoint was called
     const url = new URL(req.url)
-    const path = url.pathname.split('/').filter(Boolean)
+    const pathParts = url.pathname.split('/').filter(Boolean) // Renamed 'path' to 'pathParts' for clarity
     
-    // The first part of the path after /ai-proxy/ is the actual API path
-    // e.g., /functions/v1/ai-proxy/api/health -> path parts after "ai-proxy" are ["api", "health"]
-    const functionNameIndex = path.findIndex(p => p === 'ai-proxy');
+    const functionNameIndex = pathParts.findIndex(p => p === 'ai-proxy');
     if (functionNameIndex === -1) {
         return createErrorResponse(ErrorType.VALIDATION, 'Invalid path: ai-proxy segment not found.', 400);
     }
-    const apiPath = path.slice(functionNameIndex + 1);
+    // apiPath will be segments after "ai-proxy", e.g., ["api", "health"] or ["api", "models", "text", "completion"]
+    const apiPath = pathParts.slice(functionNameIndex + 1);
 
-    // apiPath[0] should be 'api'
     if (apiPath.length < 1 || apiPath[0] !== 'api') {
       return createErrorResponse(
         ErrorType.VALIDATION,
-        'Invalid endpoint structure. Expected /api/...',
+        'Invalid endpoint structure. Path must start with /api/... after /ai-proxy/',
         400
       )
     }
     
-    // apiPath[1] is the main endpoint category e.g. 'health', 'keys'
-    const mainEndpoint = apiPath[1] 
+    const mainEndpointCategory = apiPath[1] // e.g. 'health', 'keys', 'models'
     
-    // Route to the appropriate handler based on the endpoint
-    switch (mainEndpoint) {
+    switch (mainEndpointCategory) {
       case 'health':
         // For health check, we need to verify auth first
         const { user } = await verifyAuth(req) // supabaseClient also returned but not used here
@@ -54,17 +52,12 @@ serve(async (req) => {
         )
       
       case 'keys':
-        // Handle API key specific endpoints, apiPath[2] will be the sub-endpoint
-        if (apiPath.length < 2) { // Must have at least /api/keys
-             return createErrorResponse(ErrorType.VALIDATION, 'API key endpoint not specified.', 400);
+        if (apiPath.length < 3) { // Expects /api/keys/{action}
+             return createErrorResponse(ErrorType.VALIDATION, 'API key action not specified (e.g., /providers, /status).', 400);
         }
-        const keyEndpoint = apiPath[2] // e.g. 'providers', 'status', 'set', 'delete'
+        const keyAction = apiPath[2]
         
-        if (!keyEndpoint) { // Path was just /api/keys
-            return createErrorResponse(ErrorType.VALIDATION, 'API key action not specified (e.g., /providers, /status).', 400);
-        }
-
-        switch (keyEndpoint) {
+        switch (keyAction) {
           case 'providers':
             return await listProviders(req)
           case 'status':
@@ -73,39 +66,65 @@ serve(async (req) => {
             if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
             return await setApiKey(req)
           case 'delete':
-            // Standard for delete is often DELETE method, but prompt implies POST/body for simplicity matching 'set'
-            // Allowing POST for delete as per prompt structure implied by curl example.
-            // if (req.method !== 'DELETE' && req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected DELETE or POST.', 405)
-            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST for delete as per API design.', 405)
+            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST for delete.', 405)
             return await deleteApiKey(req)
           default:
             return createErrorResponse(
               ErrorType.NOT_FOUND,
-              `API key endpoint '/${keyEndpoint}' not found.`,
+              `API key action '/${keyAction}' not found.`,
               404
             )
         }
       
+      case 'models':
+        // Path structure: /api/models/{modelType}/{modelAction}
+        // e.g., /api/models/text/completion  => apiPath = ["api", "models", "text", "completion"]
+        // apiPath[0]="api", apiPath[1]="models", apiPath[2]="text", apiPath[3]="completion"
+        if (apiPath.length < 4) { 
+          return createErrorResponse(
+            ErrorType.VALIDATION,
+            'Invalid model endpoint structure. Expected /api/models/{type}/{action}.',
+            400
+          )
+        }
+        
+        const modelType = apiPath[2]       // "text" or "chat"
+        const modelAction = apiPath[3]     // "completion"
+        
+        if (modelAction === 'completion') {
+          if (modelType === 'text') {
+            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+            return await handleTextCompletion(req)
+          } else if (modelType === 'chat') {
+            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+            return await handleChatCompletion(req)
+          }
+        }
+        
+        return createErrorResponse(
+          ErrorType.NOT_FOUND,
+          `Model endpoint /${modelType}/${modelAction} not found or not supported.`,
+          404
+        )
+      
       default:
-        // If apiPath[0] was 'api' but apiPath[1] is not 'health' or 'keys'
-        if (mainEndpoint) {
+        if (mainEndpointCategory) {
             return createErrorResponse(
               ErrorType.NOT_FOUND,
-              `Endpoint '/api/${mainEndpoint}' not implemented.`,
+              `Endpoint category '/api/${mainEndpointCategory}' not implemented.`,
               501 
             )
         }
-        // This case should ideally be caught by the apiPath length check earlier
         return createErrorResponse(
             ErrorType.VALIDATION,
-            'Invalid API endpoint path.',
+            'Invalid API endpoint path. Main category not specified.',
             400
         );
     }
   } catch (error) {
-    console.error('Error processing request in ai-proxy/index.ts:', error.message)
+    console.error('Error processing request in ai-proxy/index.ts:', error.message, error.stack)
     
-    if (error.message === 'Unauthorized') {
+    if (error.message === 'Unauthorized') { // From verifyAuth if it throws directly
       return createErrorResponse(ErrorType.AUTHENTICATION, 'Unauthorized', 401)
     }
     
@@ -117,3 +136,4 @@ serve(async (req) => {
     return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500)
   }
 })
+
