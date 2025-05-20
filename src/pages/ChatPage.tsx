@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import ChatInterface from '@/components/chat/ChatInterface';
 import SessionList from '@/components/chat/SessionList';
@@ -20,6 +21,9 @@ const ChatPage = () => {
   const [isValidModelId, setIsValidModelId] = React.useState(true);
   const [attemptedModelId, setAttemptedModelId] = React.useState<string | null>(null);
 
+  // Set a default model if none is specified or invalid
+  const defaultModel = 'gpt-4o-mini';
+
   useEffect(() => {
     if (modelIdFromUrl) {
       setAttemptedModelId(modelIdFromUrl);
@@ -35,7 +39,7 @@ const ChatPage = () => {
     }
   }, [modelIdFromUrl]);
 
-  const initialModelForHook = modelIdFromUrl && isValidModelId ? modelIdFromUrl : 'gpt-4o-mini';
+  const initialModelForHook = modelIdFromUrl && isValidModelId ? modelIdFromUrl : defaultModel;
 
   const {
     sessions,
@@ -57,18 +61,24 @@ const ChatPage = () => {
 
   useEffect(() => {
     const currentModelIdFromUrl = searchParams.get('model');
+    // Only change model if there's a valid model ID in the URL AND we have an active session
     if (currentModelIdFromUrl && isValidModelId && activeSession) {
+      // Update the model for the active session if it's different
       if (activeSession.modelUsed !== currentModelIdFromUrl) {
         updateSessionModel(activeSession.id, currentModelIdFromUrl);
       }
+      
+      // Remove the model parameter from URL after processing it
       const newSearchParams = new URLSearchParams(searchParams);
       newSearchParams.delete('model');
       setSearchParams(newSearchParams, { replace: true });
     }
   }, [searchParams, activeSession, updateSessionModel, isValidModelId, setSearchParams]);
 
-  const selectedModelForActiveSession = activeSession?.modelUsed || initialModelForHook;
+  // Get the current model for the active session, or use default
+  const selectedModelForActiveSession = activeSession?.modelUsed || defaultModel;
 
+  // If we have an invalid model in the URL, show error page
   if (!isValidModelId && attemptedModelId) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-deep-bg">
@@ -114,6 +124,7 @@ const ChatPage = () => {
               onSendMessage={handleSendMessage}
               onSelectModel={(modelId) => {
                 updateSessionModel(activeSession.id, modelId);
+                // Clear any model params from URL when model is changed manually
                 if (searchParams.has('model')) {
                   const newSearchParams = new URLSearchParams(searchParams);
                   newSearchParams.delete('model');

@@ -96,6 +96,7 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
       const now = Date.now();
       return prevSessions.map(session => {
         if (session.id === sessionId) {
+          // Use the current session model or override if provided
           const modelForMessage = modelOverride || session.modelUsed;
           const newMessage = createNewMessage(text, sender, modelForMessage);
           
@@ -109,7 +110,7 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
             messages: [...session.messages, newMessage],
             lastActivityAt: now,
             name: newName,
-            modelUsed: modelForMessage
+            modelUsed: modelForMessage // Ensure the session's model is updated
           };
         }
         return session;
@@ -130,21 +131,23 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
   const handleSendMessage = useCallback(async (text: string) => {
     if (!activeSessionId || text.trim() === '') return;
 
-    // Optimistically get the current session model before adding the user message
-    // This ensures the AI response uses the model active at the time of sending.
-    const sessionBeforeUserMessage = persistedSessions.find(s => s.id === activeSessionId);
-    const modelForResponse = sessionBeforeUserMessage?.modelUsed || initialModel;
+    // Get the active session to ensure we use its current model
+    const currentSession = persistedSessions.find(s => s.id === activeSessionId);
+    if (!currentSession) return;
+    
+    const modelForResponse = currentSession.modelUsed;
 
+    // Add user message
     addMessageToSession(activeSessionId, text, 'user');
     setIsAiTypingInHook(true);
 
     setTimeout(() => {
-      // No need to find session again, use modelForResponse captured earlier
+      // Add AI response with the current model
       const aiResponseText = `Simulated response from ${modelForResponse} to: "${text}"`;
       addMessageToSession(activeSessionId, aiResponseText, 'ai', modelForResponse);
       setIsAiTypingInHook(false);
     }, 1500);
-  }, [activeSessionId, addMessageToSession, persistedSessions, initialModel]);
+  }, [activeSessionId, addMessageToSession, persistedSessions]);
 
   const regenerateResponse = useCallback(async (messageIdToRegenerate: string) => {
     if (!activeSessionId) return;
@@ -160,8 +163,9 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
     if (userPromptMessageIndex < 0 || currentSession.messages[userPromptMessageIndex].sender !== 'user') return;
     
     const userPrompt = currentSession.messages[userPromptMessageIndex].text;
-    const modelForRegeneration = currentSession.modelUsed;
+    const modelForRegeneration = currentSession.modelUsed; // Use the current session model
 
+    // Remove the original AI message
     updateAndPersistSessions(prevSessions => prevSessions.map(s => {
       if (s.id === activeSessionId) {
         return {

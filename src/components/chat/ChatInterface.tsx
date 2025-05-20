@@ -10,7 +10,6 @@ import { ChevronDown } from 'lucide-react';
 import { useChatScroll } from '@/hooks/useChatScroll';
 import { useChatToasts } from '@/hooks/useChatToasts';
 
-
 export interface Message {
   id: string;
   text: string;
@@ -65,11 +64,13 @@ const ChatInterface = ({
 
   return (
     <div className="flex flex-col h-full w-full bg-deep-bg text-light-text relative">
+      {/* Header with model selector */}
       <div className="p-4 border-b border-border flex justify-between items-center bg-card">
         <h2 className="text-xl font-semibold text-neon-cyan">AI Chat</h2>
         <ModelSelector selectedModel={currentModel} onSelectModel={onSelectModel} />
       </div>
 
+      {/* Message area with scroll */}
       <ScrollArea className="flex-grow p-4 md:p-6" ref={scrollAreaRef}>
         <div ref={viewportRef} className="h-full space-y-4 max-w-3xl mx-auto">
           {messages.map((msg) => (
@@ -85,6 +86,7 @@ const ChatInterface = ({
         </div>
       </ScrollArea>
 
+      {/* Scroll to bottom button */}
       {showScrollToBottom && (
         <Button
           variant="outline"
@@ -97,6 +99,7 @@ const ChatInterface = ({
         </Button>
       )}
 
+      {/* Message input area - ensuring this is always visible */}
       <div className="max-w-3xl mx-auto w-full px-4 md:px-6">
         <MessageInput onSendMessage={onSendMessage} />
       </div>
