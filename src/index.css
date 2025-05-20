@@ -75,3 +75,20 @@
 /* Add Google Font Inter */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* Added CSS classes for chat layout */
+@layer components {
+  .chat-container {
+    @apply flex flex-col h-full overflow-hidden;
+  }
+
+  .messages-area {
+    /* Using inline style for height calc, overflow-y is also inline for now */
+    /* Tailwind's p-4 and space-y-4 will handle padding and message spacing */
+  }
+
+  .input-area {
+    @apply flex-shrink-0; 
+    /* Tailwind classes border-t, p-4, bg-deep-bg handle the rest */
+  }
+}
+
