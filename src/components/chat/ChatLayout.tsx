@@ -1,3 +1,4 @@
+
 import React from 'react';
 import SessionList from '@/components/chat/SessionList';
 import ChatInterface from '@/components/chat/ChatInterface';
@@ -45,7 +46,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
   const selectedModelForActiveSession = activeSession?.modelUsed || 'gpt-4o-mini';
 
   return (
-    <div className="flex h-full w-full overflow-hidden" style={{ minHeight: '100%' }}>
+    // Added flex-1 to ensure this layout takes up available space from ChatPage
+    <div className="flex h-full w-full overflow-hidden flex-1" style={{ minHeight: '100%' }}>
       {/* Sidebar with session list - now h-full and flex flex-col, updated border */}
       <div className="w-[286px] h-full flex-shrink-0 bg-card border-r border-border/40 overflow-hidden flex flex-col" style={{ minHeight: '100%' }}>
         <SessionList

@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import ChatMessage from './ChatMessage';
 import ModelSelector from './ModelSelector';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Send } from 'lucide-react';
 import { useChatToasts } from '@/hooks/useChatToasts';
 import { Message } from '@/types/chat';
-import { logger } from '@/utils/logger'; // Added logger import
+import { logger } from '@/utils/logger';
 
 interface ChatInterfaceProps {
   messages: Message[];
@@ -31,27 +32,23 @@ const ChatInterface = ({
   
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  // messagesContainerRef is kept for potential future use, but not for height calculation
+  const messagesContainerRef = useRef<HTMLDivElement>(null); 
 
   const {
     handleCopyToClipboard,
     showSaveToggleToast,
   } = useChatToasts();
   
-  // Function to scroll to bottom (simplified from user snippet)
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior });
     }
   };
   
-  // Scroll to bottom when messages change or AI is typing
   useEffect(() => {
-    // Auto scroll for new messages or when AI starts typing
     if (messages.length > 0 || isAiTyping) {
-        // A small delay can help ensure the DOM is updated, especially for smooth scroll
         const timer = setTimeout(() => {
-            // Prioritize auto scroll on user message, smooth on AI.
             const lastMessage = messages[messages.length -1];
             if (lastMessage?.role === 'user') {
                 scrollToBottom('auto');
@@ -78,32 +75,26 @@ const ChatInterface = ({
     const message = messages.find(msg => msg.id === messageId);
     onToggleSaveMessage(messageId); 
     if (message) {
-        showSaveToggleToast(!!message.isSaved); // Toggling from previous state, so !message.isSaved
+        showSaveToggleToast(!!message.isSaved);
     }
   };
 
-  // Header height target: 65px.
-  // Input area height: 65px (fixed).
-  // New combinedFixedElementsHeight = header(65px) + input_area(65px) = 130px.
-  const combinedFixedElementsHeight = "130px";
+  // combinedFixedElementsHeight constant is no longer needed as messages area uses flex-1.
 
   return (
-    <div className="flex flex-col h-full w-full bg-deep-bg text-light-text chat-container" style={{ minHeight: '100%' }}>
-      {/* Fixed header with precise border and height */}
-      <div className="flex-shrink-0 border-b border-border flex justify-between items-center bg-card chat-header px-4">
+    // Added flex-1 to make this component fill available space from ChatLayout
+    <div className="flex flex-col h-full w-full bg-deep-bg text-light-text chat-container flex-1" style={{ minHeight: '100%' }}>
+      {/* Fixed header with precise border and explicit height */}
+      <div className="flex-shrink-0 border-b border-border flex justify-between items-center bg-card chat-header px-4 h-[65px]">
         <h2 className="text-xl font-semibold text-neon-cyan">AI Chat</h2>
         <ModelSelector selectedModel={currentModel} onSelectModel={onSelectModel} />
       </div>
 
-      {/* Scrollable messages container - ONLY THIS PART SCROLLS */}
+      {/* Scrollable messages container - uses flex-1 to fill space, overflow-y for scrolling */}
       <div 
         ref={messagesContainerRef}
-        className="py-4 px-4 md:px-6 space-y-4 messages-area flex-1"
-        style={{ 
-          height: `calc(100% - ${combinedFixedElementsHeight})`,
-          overflowY: 'auto',
-          minHeight: '0', // This helps flex children respect parent constraints
-        }}
+        className="py-4 px-4 md:px-6 space-y-4 messages-area flex-1 overflow-y-auto"
+        // Removed inline style for height calculation, minHeight: '0' is implicitly handled by flex-1 in a flex-col parent
       >
         <div className="max-w-3xl mx-auto w-full">
             {messages.map((msg) => (
@@ -123,16 +114,14 @@ const ChatInterface = ({
               />
             ))}
             {isAiTyping && <TypingIndicator modelName={currentModel} />}
-            {/* Empty div at the end for scroll target */}
             <div ref={messagesEndRef} />
         </div>
       </div>
 
-      {/* Fixed input area with precise border */}
-      {/* Outer div is now full-width, its top border will span the full width. mx-auto and w-[497px] removed. */}
-      <div className="flex-shrink-0 border-t border-border bg-deep-bg input-area h-[65px] px-4 py-3">
-        {/* This inner div centers the content and constrains its width */}
-        <div className="mx-auto w-[497px]">
+      {/* Fixed input area - outer div is full-width for the border, inner div centers content */}
+      <div className="flex-shrink-0 border-t border-border bg-deep-bg input-area h-[65px] w-full">
+        {/* This inner div centers the input elements and applies padding */}
+        <div className="mx-auto w-[497px] h-full flex items-center px-4 py-3"> {/* Added flex items-center */}
           <div className="w-full flex items-center gap-2">
             <input
               type="text"

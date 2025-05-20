@@ -5,7 +5,7 @@ import { useUrlModelParam } from '@/hooks/useUrlModelParam';
 import InvalidModelError from '@/components/chat/InvalidModelError';
 import LoadingState from '@/components/chat/LoadingState';
 import ChatLayout from '@/components/chat/ChatLayout';
-import { logger } from '@/utils/logger'; // Added logger import
+import { logger } from '@/utils/logger';
 
 const defaultModel = 'gpt-4o-mini';
 
@@ -45,7 +45,8 @@ const ChatPage = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-var(--navbar-height)-var(--footer-height)-4rem)] overflow-hidden">
+    // Updated height calculation and added flex flex-col
+    <div className="h-[calc(100vh-var(--navbar-height)-var(--footer-height))] overflow-hidden flex flex-col">
       <ChatLayout
         sessions={sessions}
         activeSession={activeSession}

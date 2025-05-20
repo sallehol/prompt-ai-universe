@@ -70,6 +70,13 @@
     z-index: -1; /* Place it behind content */
     pointer-events: none;
   }
+
+  /* Added styles for #root to ensure it takes full viewport height and uses flex column */
+  #root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
 }
 
 /* Add Google Font Inter */
@@ -82,23 +89,19 @@
   }
 
   .messages-area {
-    /* Using inline style for height calc, overflow-y is also inline for now */
-    /* Tailwind's p-4 and space-y-4 will handle padding and message spacing */
+    /* Using flex-1 and overflow-y-auto directly in ChatInterface.tsx */
   }
 
   .input-area {
     @apply flex-shrink-0; 
-    /* Tailwind classes border-t, p-4, bg-deep-bg handle the rest */
   }
   
-  /* Add consistent border styling */
   .border-standard {
     @apply border-border;
     border-width: 1px;
     border-style: solid;
   }
 
-  /* Ensure all borders use the same color */
   .border,
   .border-t,
   .border-r,
@@ -107,15 +110,20 @@
     @apply border-border;
   }
 
-  /* Chat header specific height */
   .chat-header {
     height: 65px;
   }
 
   @media (max-width: 768px) {
     .chat-header {
-      height: 65px; /* Maintain consistent height on mobile */
+      height: 65px; 
     }
   }
-}
 
+  /* Fix for nested flex containers (added but not yet applied in components) */
+  .flex-container-fix {
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* Critical for nested flex containers */
+  }
+}
