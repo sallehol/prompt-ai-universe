@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import ChatMessage from './ChatMessage';
 import ModelSelector from './ModelSelector';
@@ -129,29 +128,33 @@ const ChatInterface = ({
       </div>
 
       {/* Fixed input area with precise border */}
-      <div className="flex-shrink-0 border-t border-border bg-deep-bg input-area mx-auto w-[497px] h-[65px] px-4 py-3">
-        <div className="w-full flex items-center gap-2">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessageInternal();
-              }
-            }}
-            placeholder="Type your message..."
-            className="flex-1 bg-card/80 border border-input rounded-md px-4 py-2 text-light-text placeholder-medium-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-          />
-          <Button
-            onClick={handleSendMessageInternal}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-            aria-label="Send message"
-            size="icon"
-          >
-            <Send className="h-5 w-5" />
-          </Button>
+      {/* Outer div is now full-width, its top border will span the full width. mx-auto and w-[497px] removed. */}
+      <div className="flex-shrink-0 border-t border-border bg-deep-bg input-area h-[65px] px-4 py-3">
+        {/* This inner div centers the content and constrains its width */}
+        <div className="mx-auto w-[497px]">
+          <div className="w-full flex items-center gap-2">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessageInternal();
+                }
+              }}
+              placeholder="Type your message..."
+              className="flex-1 bg-card/80 border border-input rounded-md px-4 py-2 text-light-text placeholder-medium-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+            <Button
+              onClick={handleSendMessageInternal}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              aria-label="Send message"
+              size="icon"
+            >
+              <Send className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -159,4 +162,3 @@ const ChatInterface = ({
 };
 
 export default ChatInterface;
-
