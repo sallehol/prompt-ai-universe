@@ -8,24 +8,38 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { toast } from '@/hooks/use-toast'; // Import toast
+import { toast } from '@/hooks/use-toast';
 
-export interface Message {
+export interface Message { // Keep this export if useChatSessions relies on it from here
   id: string;
   text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
   model?: string;
-  isSaved?: boolean; // Added for save functionality
+  isSaved?: boolean;
 }
 
-const ChatInterface = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    { id: '1', text: 'Hello! How can I help you today?', sender: 'ai', timestamp: new Date(), model: 'gpt-4o-mini', isSaved: false },
-  ]);
-  const [selectedModel, setSelectedModel] = useState<string>('gpt-4o-mini');
-  const [isAiTyping, setIsAiTyping] = useState<boolean>(false);
+interface ChatInterfaceProps {
+  messages: Message[];
+  currentModel: string;
+  isAiTyping: boolean;
+  onSendMessage: (text: string) => void;
+  onSelectModel: (model: string) => void;
+  onRegenerateResponse: (messageId: string) => void;
+  onToggleSaveMessage: (messageId: string) => void;
+}
+
+const ChatInterface = ({
+  messages,
+  currentModel,
+  isAiTyping,
+  onSendMessage,
+  onSelectModel,
+  onRegenerateResponse,
+  onToggleSaveMessage,
+}: ChatInterfaceProps) => {
   const [showScrollToBottom, setShowScrollToBottom] = useState<boolean>(false);
+  // const [localIsAiTyping, setLocalIsAiTyping] = useState<boolean>(false); // Managed by hook now
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -39,40 +53,17 @@ const ChatInterface = () => {
     }
   }, []);
 
-  const handleSendMessage = (text: string) => {
-    if (text.trim() === '') return;
-
-    const newUserMessage: Message = {
-      id: Date.now().toString(),
-      text,
-      sender: 'user',
-      timestamp: new Date(),
-    };
-    setMessages((prevMessages) => [...prevMessages, newUserMessage]);
-    setIsAiTyping(true);
-
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: `This is a simulated response from ${selectedModel} to your message: "${text}"`,
-        sender: 'ai',
-        timestamp: new Date(),
-        model: selectedModel,
-        isSaved: false,
-      };
-      setMessages((prevMessages) => [...prevMessages, aiResponse]);
-      setIsAiTyping(false);
-      // Scroll smoothly after AI message is added
-      // Use a short timeout to ensure the message is rendered before scrolling
-      setTimeout(() => scrollToBottom('smooth'), 50);
-    }, 1500);
-  };
+  // Use the passed isAiTyping prop
+  // const handleSend = (text: string) => {
+  //   onSendMessage(text); // This will trigger isAiTyping from the hook
+  // };
 
   useEffect(() => {
     // Scroll non-smoothly for user messages and initial typing indicator
-    if (isAiTyping || messages[messages.length -1]?.sender === 'user') {
+    if (isAiTyping || (messages.length > 0 && messages[messages.length - 1]?.sender === 'user')) {
       scrollToBottom('auto');
+    } else if (messages.length > 0) { // Scroll smoothly for new AI messages after typing
+        setTimeout(() => scrollToBottom('smooth'), 50);
     }
   }, [messages, isAiTyping, scrollToBottom]);
 
@@ -82,16 +73,14 @@ const ChatInterface = () => {
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = viewport;
-      // Show button if not at bottom and there's content to scroll to
-      const atBottom = scrollHeight - scrollTop <= clientHeight + 20; // Added a small tolerance
+      const atBottom = scrollHeight - scrollTop <= clientHeight + 20;
       setShowScrollToBottom(!atBottom && scrollHeight > clientHeight);
     };
 
     viewport.addEventListener('scroll', handleScroll);
-    // Initial check
-    handleScroll();
+    handleScroll(); // Initial check
     return () => viewport.removeEventListener('scroll', handleScroll);
-  }, [messages]); // Re-check on messages change as scrollHeight might update
+  }, [messages]); // Re-check on messages change
 
   const handleCopyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -110,74 +99,51 @@ const ChatInterface = () => {
       });
     });
   };
-
-  const handleRegenerateResponse = (messageId: string) => {
-    // Placeholder for regeneration logic
-    console.log(`Regenerate response for message ID: ${messageId}`);
-    const originalMessage = messages.find(msg => msg.id === messageId);
-    if (originalMessage && originalMessage.sender === 'ai') {
-        // For now, just simulate a new response based on the previous query structure
-        // This assumes the user's message prompting this AI response is the one before it.
-        const userMessageIndex = messages.findIndex(msg => msg.id === messageId) -1;
-        if (userMessageIndex >= 0 && messages[userMessageIndex].sender === 'user') {
-            const userPrompt = messages[userMessageIndex].text;
-            setIsAiTyping(true);
-            // Remove old AI response
-            setMessages(prev => prev.filter(msg => msg.id !== messageId));
-
-            setTimeout(() => {
-              const regeneratedResponse: Message = {
-                id: Date.now().toString(), // New ID for regenerated message
-                text: `(Regenerated) This is a new simulated response from ${selectedModel} to: "${userPrompt}"`,
-                sender: 'ai',
-                timestamp: new Date(),
-                model: selectedModel,
-                isSaved: false,
-              };
-              setMessages((prevMessages) => [...prevMessages, regeneratedResponse]);
-              setIsAiTyping(false);
-              setTimeout(() => scrollToBottom('smooth'), 50);
-            }, 1500);
-        } else {
-             toast({ title: "Cannot regenerate", description: "Original user prompt not found.", variant: "destructive" });
-        }
-    }
+  
+  const handleInternalRegenerate = (messageId: string) => {
+    // The actual regeneration logic is now in useChatSessions hook
+    onRegenerateResponse(messageId);
+    // Potentially show local loading state if needed, but hook manages isAiTyping
   };
 
-  const handleToggleSaveMessage = (messageId: string) => {
-    setMessages((prevMessages) =>
-      prevMessages.map((msg) =>
-        msg.id === messageId ? { ...msg, isSaved: !msg.isSaved } : msg
-      )
-    );
+  const handleInternalToggleSave = (messageId: string) => {
+    onToggleSaveMessage(messageId);
     const message = messages.find(msg => msg.id === messageId);
+    // Check the state *after* toggle for the correct toast message.
+    // This requires a slight delay or getting the new state back if toast is critical here.
+    // For simplicity, the hook doesn't return the *exact* toggled message state immediately for this toast.
+    // A more robust solution might involve the hook returning the updated message or handling toast itself.
     if (message) {
+        // This toast will reflect the state *before* the update propogates fully.
+        // It's better if the toast source of truth is closer to the state update (i.e., in the hook or ChatPage).
+        // For now, this is a known minor limitation of this toast placement.
         toast({
-            title: message.isSaved ? "Message Unsaved" : "Message Saved",
+            title: !message.isSaved ? "Message Saved" : "Message Unsaved", // Logic inverted due to timing
             duration: 2000,
         });
     }
   };
 
+
   return (
-    <div className="flex flex-col h-full bg-deep-bg text-light-text border border-border rounded-lg shadow-xl relative">
-      <div className="p-4 border-b border-border flex justify-between items-center">
+    <div className="flex flex-col h-full bg-deep-bg text-light-text border-l border-border shadow-xl relative"> {/* Removed main border, now part of page layout */}
+      <div className="p-4 border-b border-border flex justify-between items-center bg-card">
         <h2 className="text-xl font-semibold text-neon-cyan">AI Chat</h2>
-        <ModelSelector selectedModel={selectedModel} onSelectModel={setSelectedModel} />
+        <ModelSelector selectedModel={currentModel} onSelectModel={onSelectModel} />
       </div>
 
       <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
-        <div ref={viewportRef} className="h-full space-y-2"> {/* Added space-y-2 for consistent message spacing */}
+        <div ref={viewportRef} className="h-full space-y-2">
           {messages.map((msg) => (
             <ChatMessage
               key={msg.id}
               message={msg}
               onCopyToClipboard={handleCopyToClipboard}
-              onRegenerateResponse={handleRegenerateResponse}
-              onToggleSaveMessage={handleToggleSaveMessage}
+              onRegenerateResponse={handleInternalRegenerate} // Use internal handler
+              onToggleSaveMessage={handleInternalToggleSave} // Use internal handler
             />
           ))}
-          {isAiTyping && <TypingIndicator modelName={selectedModel} />}
+          {isAiTyping && <TypingIndicator modelName={currentModel} />}
         </div>
       </ScrollArea>
 
@@ -193,10 +159,9 @@ const ChatInterface = () => {
         </Button>
       )}
 
-      <MessageInput onSendMessage={handleSendMessage} />
+      <MessageInput onSendMessage={onSendMessage} />
     </div>
   );
 };
 
 export default ChatInterface;
-
