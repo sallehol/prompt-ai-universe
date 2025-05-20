@@ -1,20 +1,27 @@
-
 // supabase/functions/ai-proxy/index.ts
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { handleCors, verifyAuth, corsHeaders } from './auth.ts'
-import { createErrorResponse, ErrorType } from './error-utils.ts' // Removed handleProviderError as it's used in text-models.ts
-import { getProviderFromModel, ProviderName, ProviderType } from './providers.ts' // Keep these, getProviderFromModel might be useful generally
+import { createErrorResponse, ErrorType } from './error-utils.ts' // Removed handleProviderError as it's used in other endpoint files
+import { getProviderFromModel, ProviderName, ProviderType } from './providers.ts'
 import { 
   listProviders, 
   checkApiKeyStatus, 
   setApiKey, 
   deleteApiKey
-  // getApiKeyInternal is not imported here as it's used by text-models.ts
+  // getApiKeyInternal is not imported here, it's used by endpoint handlers
 } from './api-keys.ts'
 import {
   handleTextCompletion,
   handleChatCompletion
-} from './text-models.ts' // New import
+} from './text-models.ts'
+import {
+  handleImageGeneration,
+  handleImageEdit,
+  handleImageVariation, // Added new handler
+  handleVideoGeneration,
+  handleTextToSpeech,
+  handleSpeechToText
+} from './multimodal-endpoints.ts' // New import for multimodal handlers
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -23,13 +30,12 @@ serve(async (req) => {
   
   try {
     const url = new URL(req.url)
-    const pathParts = url.pathname.split('/').filter(Boolean) // Renamed 'path' to 'pathParts' for clarity
+    const pathParts = url.pathname.split('/').filter(Boolean)
     
     const functionNameIndex = pathParts.findIndex(p => p === 'ai-proxy');
     if (functionNameIndex === -1) {
         return createErrorResponse(ErrorType.VALIDATION, 'Invalid path: ai-proxy segment not found.', 400);
     }
-    // apiPath will be segments after "ai-proxy", e.g., ["api", "health"] or ["api", "models", "text", "completion"]
     const apiPath = pathParts.slice(functionNameIndex + 1);
 
     if (apiPath.length < 1 || apiPath[0] !== 'api') {
@@ -88,24 +94,73 @@ serve(async (req) => {
           )
         }
         
-        const modelType = apiPath[2]       // "text" or "chat"
-        const modelAction = apiPath[3]     // "completion"
+        const modelType = apiPath[2]       // "text", "chat", "image", "video", "audio"
+        const modelAction = apiPath[3]     // "completion", "generation", "edit", "variation", "speech", "transcription"
         
-        if (modelAction === 'completion') {
-          if (modelType === 'text') {
-            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-            return await handleTextCompletion(req)
-          } else if (modelType === 'chat') {
-            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-            return await handleChatCompletion(req)
-          }
+        // Ensure POST for actions that modify or generate new data
+        // GET could be used for listing models or capabilities in future, but all current actions are POST-like
+        if (req.method !== 'POST' && 
+            !((modelType === 'image' && modelAction === 'edit') || // Edit/Variation might involve form data with POST
+              (modelType === 'image' && modelAction === 'variation') ||
+              (modelType === 'audio' && modelAction === 'transcription'))) {
+            // Allowing POST for all model actions initially for simplicity, but can be refined
+            // The above check is an example, simpler to just enforce POST for all data-changing ops
+        }
+        if (req.method !== 'POST') {
+             // Specific checks for methods (e.g. image edit with FormData) are handled within the endpoint handlers
+             // For now, most model interactions will be POST.
+        }
+
+
+        switch (modelType) {
+          case 'text':
+            if (modelAction === 'completion') {
+              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+              return await handleTextCompletion(req);
+            }
+            break;
+          case 'chat':
+            if (modelAction === 'completion') {
+              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+              return await handleChatCompletion(req);
+            }
+            break;
+          case 'image':
+            if (modelAction === 'generation') {
+              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+              return await handleImageGeneration(req);
+            } else if (modelAction === 'edit') {
+              // FormData requests are POST
+              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+              return await handleImageEdit(req);
+            } else if (modelAction === 'variation') { // New endpoint for image variations
+              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+              return await handleImageVariation(req);
+            }
+            break;
+          case 'video':
+            if (modelAction === 'generation') {
+              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+              return await handleVideoGeneration(req);
+            }
+            break;
+          case 'audio':
+            if (modelAction === 'speech') { // Text-to-speech
+              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+              return await handleTextToSpeech(req);
+            } else if (modelAction === 'transcription') { // Speech-to-text
+              // FormData requests are POST
+              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
+              return await handleSpeechToText(req);
+            }
+            break;
         }
         
         return createErrorResponse(
           ErrorType.NOT_FOUND,
           `Model endpoint /${modelType}/${modelAction} not found or not supported.`,
           404
-        )
+        );
       
       default:
         if (mainEndpointCategory) {
@@ -136,4 +191,3 @@ serve(async (req) => {
     return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500)
   }
 })
-
