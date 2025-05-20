@@ -1,17 +1,17 @@
 
 import React, { useState } from 'react';
-import { Session } from '@/types/chat';
+import { Session, Message } from '@/types/chat'; // Message type for session.messages
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/components/ui/input'; // For rename dialog
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
-import { Plus, Edit3, Trash2, MessageSquareText } from 'lucide-react';
+import { Plus, Edit3, Trash2 } from 'lucide-react'; // MessageSquareText not used in new design
 import { cn } from '@/lib/utils';
 
 interface SessionListProps {
   sessions: Session[];
   activeSessionId: string | null;
-  onCreateSession: () => string; // Returns new session ID
+  onCreateSession: () => string;
   onSwitchSession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, newName: string) => void;
   onDeleteSession: (sessionId: string) => void;
@@ -44,21 +44,116 @@ const SessionList: React.FC<SessionListProps> = ({
   };
 
   const handleNewChat = () => {
-    console.log('Creating new chat...');
-    console.log('Before creating new chat - Current sessions:', sessions);
+    console.log('[SessionList] Creating new chat via props...');
     const newId = onCreateSession();
-    console.log('New chat created with ID:', newId);
-    // The sessions prop might not update immediately here due to state batching.
-    // To see updated sessions, log inside a useEffect that depends on `sessions` in the parent component,
-    // or rely on the logs within `useSessionMutations` and `useSessionPersistence`.
-    console.log('Switching to new chat...');
+    console.log('[SessionList] New chat created with ID from props:', newId);
+    console.log('[SessionList] Switching to new chat via props...');
     onSwitchSession(newId);
   };
 
-  const handleClearChatClick = () => {
-    if (activeSessionId) {
-        onClearCurrentChat(activeSessionId);
+  const groupSessionsByDate = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    
+    const groups: { today: Session[], yesterday: Session[], previous7Days: Session[], older: Session[] } = {
+      today: [],
+      yesterday: [],
+      previous7Days: [],
+      older: []
+    };
+    
+    sessions.forEach(session => {
+      const sessionDate = new Date(session.lastActivityAt); // Using lastActivityAt for grouping
+      sessionDate.setHours(0, 0, 0, 0);
+      
+      if (sessionDate.getTime() === today.getTime()) {
+        groups.today.push(session);
+      } else if (sessionDate.getTime() === yesterday.getTime()) {
+        groups.yesterday.push(session);
+      } else if (sessionDate >= weekAgo) {
+        groups.previous7Days.push(session);
+      } else {
+        groups.older.push(session);
+      }
+    });
+    // Sort sessions within each group by lastActivityAt descending
+    for (const key in groups) {
+        groups[key as keyof typeof groups].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
     }
+    return groups;
+  };
+  
+  const sessionGroups = groupSessionsByDate();
+
+  const renderSessionItem = (session: Session) => (
+    <Dialog key={session.id} onOpenChange={(open) => !open && setEditingSessionId(null)}>
+      <div
+        className={cn(
+          'flex items-center p-3 rounded-md hover:bg-accent cursor-pointer group mb-1 mx-1', // Added mx-1 for slight indent
+          session.id === activeSessionId && 'bg-accent text-accent-foreground'
+        )}
+        onClick={() => onSwitchSession(session.id)}
+      >
+        <div className="flex-1 truncate">
+          <span className={cn("truncate block text-sm", session.id === activeSessionId && "font-medium")} title={session.name}>
+            {session.name}
+          </span>
+          <span className={cn("text-xs truncate block", session.id === activeSessionId ? "text-accent-foreground/80" : "text-muted-foreground")}>
+            {session.messages.length > 0 
+              ? (session.messages[session.messages.length - 1].content || "Empty message").substring(0, 30) + ((session.messages[session.messages.length - 1].content || "").length > 30 ? '...' : '')
+              : 'No messages yet'}
+          </span>
+        </div>
+        <div className="flex-shrink-0 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleStartEdit(session); }}>
+              <Edit3 size={13} />
+            </Button>
+          </DialogTrigger>
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }}>
+            <Trash2 size={13} />
+          </Button>
+        </div>
+      </div>
+      {editingSessionId === session.id && (
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Chat</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Enter new chat name"
+            onKeyPress={(e) => e.key === 'Enter' && handleRename()}
+          />
+          <DialogFooter>
+            <DialogClose asChild>
+               <Button variant="outline" onClick={() => setEditingSessionId(null)}>Cancel</Button>
+            </DialogClose>
+            <DialogClose asChild>
+              <Button onClick={handleRename}>Save</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      )}
+    </Dialog>
+  );
+  
+  const renderSessionGroup = (title: string, groupSessions: Session[]) => {
+    if (groupSessions.length === 0) return null;
+    
+    return (
+      <div className="mb-3"> {/* Reduced bottom margin for group */}
+        <h3 className="text-xs font-semibold text-muted-foreground mb-1.5 px-3 pt-2">{title}</h3> {/* Adjusted padding and margin */}
+        {groupSessions.map(session => renderSessionItem(session))}
+      </div>
+    );
   };
 
   const isClearChatDisabled = () => {
@@ -68,92 +163,38 @@ const SessionList: React.FC<SessionListProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full p-2 bg-card border-r border-border text-sm">
-      <Button
-        onClick={handleNewChat}
-        className="w-full mb-3 bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center gap-2"
-        variant="default"
-      >
-        <Plus size={18} className="stroke-[2.5px]" /> New Chat
-      </Button>
-
-      <p className="text-xs text-muted-foreground mt-1 mb-1 px-1">Conversations</p>
-      <ScrollArea className="flex-grow mb-2">
-        {sessions.map((session) => (
-          <Dialog key={session.id} onOpenChange={(open) => !open && setEditingSessionId(null)}>
-            <div
-              className={cn(
-                'flex flex-col p-2 rounded-md hover:bg-accent cursor-pointer group mb-1.5', // slightly increased mb
-                session.id === activeSessionId && 'bg-accent text-accent-foreground'
-              )}
-              onClick={() => onSwitchSession(session.id)}
-            >
-              {/* Session header with title and actions */}
-              <div className="flex items-center justify-between w-full">
-                <div className="flex items-center truncate">
-                  <MessageSquareText size={15} className="mr-2 flex-shrink-0" />
-                  <span className={cn("truncate font-medium", session.id === activeSessionId && "text-accent-foreground")} title={session.name}>
-                    {session.name}
-                  </span>
-                </div>
-                <div className="flex-shrink-0 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleStartEdit(session); }}>
-                      <Edit3 size={13} />
-                    </Button>
-                  </DialogTrigger>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }}>
-                    <Trash2 size={13} />
-                  </Button>
-                </div>
-              </div>
-              
-              {/* Preview of last message */}
-              <div className={cn("text-xs text-muted-foreground mt-1 truncate pl-[23px]", session.id === activeSessionId && "text-accent-foreground/80")}> {/* Align with text after icon */}
-                {session.messages.length > 0 
-                  ? (session.messages[session.messages.length - 1].content || "Empty message").substring(0, 35) + ((session.messages[session.messages.length - 1].content || "").length > 35 ? '...' : '')
-                  : 'No messages yet'}
-              </div>
-              {/* Timestamp */}
-              <div className={cn("text-xs text-muted-foreground mt-0.5 pl-[23px]", session.id === activeSessionId && "text-accent-foreground/70")}> {/* Align with text after icon */}
-                {new Date(session.lastActivityAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}
-              </div>
-            </div>
-            
-            {editingSessionId === session.id && (
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Rename Chat</DialogTitle>
-                </DialogHeader>
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Enter new chat name"
-                  onKeyPress={(e) => e.key === 'Enter' && handleRename()}
-                />
-                <DialogFooter>
-                  <DialogClose asChild>
-                     <Button variant="outline" onClick={() => setEditingSessionId(null)}>Cancel</Button>
-                  </DialogClose>
-                  <DialogClose asChild>
-                    <Button onClick={handleRename}>Save</Button>
-                  </DialogClose>
-                </DialogFooter>
-              </DialogContent>
-            )}
-          </Dialog>
-        ))}
+    <div className="flex flex-col h-full bg-card border-r border-border"> {/* Removed text-sm, item will handle */}
+      <div className="p-3">
+        <Button
+          onClick={handleNewChat}
+          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center gap-2"
+          variant="default" // Kept default variant as per user's original working button
+        >
+          <Plus size={16} className="stroke-[2.5px]" /> New chat
+        </Button>
+      </div>
+      
+      <ScrollArea className="flex-grow"> {/* Removed px-1, item has mx-1 */}
+        {renderSessionGroup('Today', sessionGroups.today)}
+        {renderSessionGroup('Yesterday', sessionGroups.yesterday)}
+        {renderSessionGroup('Previous 7 Days', sessionGroups.previous7Days)}
+        {renderSessionGroup('Older', sessionGroups.older)}
+        {sessions.length === 0 && (
+            <p className="px-3 py-2 text-sm text-muted-foreground">No chats yet. Start a new one!</p>
+        )}
       </ScrollArea>
-
-      <Button
-        onClick={handleClearChatClick}
-        variant="ghost"
-        className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center justify-center gap-2 mt-auto pt-2 pb-2 border-t border-border"
-        disabled={isClearChatDisabled()}
-        title={isClearChatDisabled() ? "Clear chat (disabled for new or empty chats)" : "Clear all messages in the current chat"}
-      >
-        <Trash2 size={16} /> Clear Current Chat
-      </Button>
+      
+      <div className="p-3 border-t border-border mt-auto">
+        <Button
+          onClick={() => activeSessionId && onClearCurrentChat(activeSessionId)}
+          variant="ghost"
+          className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center justify-center gap-2"
+          disabled={isClearChatDisabled()}
+          title={isClearChatDisabled() ? "Clear chat (disabled for new or empty chats)" : "Clear all messages in the current chat"}
+        >
+          <Trash2 size={16} /> Clear Current Chat
+        </Button>
+      </div>
     </div>
   );
 };

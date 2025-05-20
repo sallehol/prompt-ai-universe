@@ -1,12 +1,13 @@
-import type { Message } from '@/components/chat/ChatInterface'; // Make sure Message is exported from ChatInterface or define it here
+
+// Remove the conflicting import: import type { Message } from '@/components/chat/ChatInterface';
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system'; // Changed from sender: 'user' | 'ai'
-  content: string; // Changed from text: string
-  timestamp: number; // Changed from Date to number
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number; // Unix timestamp
   isSaved?: boolean;
-  // model?: string; // model was part of the old Message interface, removing as per new spec.
+  // model?: string; // model was part of the old Message interface, was on Session.modelUsed
 }
 
 export interface Session {
