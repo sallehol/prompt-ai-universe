@@ -1,4 +1,3 @@
-
 import React from 'react';
 import SessionList from '@/components/chat/SessionList';
 import ChatInterface from '@/components/chat/ChatInterface';
@@ -8,6 +7,7 @@ import { getModelById } from '@/data/aiModels';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
+import { logger } from '@/utils/logger';
 
 interface ChatLayoutProps {
   sessions: Session[];
@@ -52,7 +52,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
           sessions={sessions}
           activeSessionId={activeSessionId}
           onCreateSession={() => {
-            console.log(`[ChatLayout] User initiated new session from SessionList button.`);
+            logger.log(`[ChatLayout] User initiated new session from SessionList button.`);
             const newSessionId = createSession();
             return newSessionId;
           }}
@@ -74,7 +74,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
             onSendMessage={handleSendMessage}
             onSelectModel={(modelId) => {
               if (activeSessionId) {
-                console.log(`[ChatLayout] onSelectModel: User selected ${modelId} for session ${activeSessionId}. Current model: ${activeSession.modelUsed}`);
+                logger.log(`[ChatLayout] onSelectModel: User selected ${modelId} for session ${activeSessionId}. Current model: ${activeSession.modelUsed}`);
                 updateSessionModel(activeSessionId, modelId);
                 
                 const modelDetails = getModelById(modelId);
@@ -83,7 +83,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
                   description: `Chat model changed to ${modelDetails?.name || modelId}.`,
                 });
               } else {
-                console.error("[ChatLayout] onSelectModel: No active session to update model for.");
+                logger.error("[ChatLayout] onSelectModel: No active session to update model for.");
               }
               onClearSearchParams();
             }}

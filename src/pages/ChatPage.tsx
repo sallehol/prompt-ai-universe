@@ -5,6 +5,7 @@ import { useUrlModelParam } from '@/hooks/useUrlModelParam';
 import InvalidModelError from '@/components/chat/InvalidModelError';
 import LoadingState from '@/components/chat/LoadingState';
 import ChatLayout from '@/components/chat/ChatLayout';
+import { logger } from '@/utils/logger'; // Added logger import
 
 const defaultModel = 'gpt-4o-mini';
 
@@ -33,7 +34,7 @@ const ChatPage = () => {
     isLoadingSessions,
   } = useChatSessions(initialModelForHook);
 
-  console.log(`[ChatPage] Rendering. isLoadingSessions: ${isLoadingSessions}, activeSessionId: ${activeSessionId}, activeSession model: ${activeSession?.modelUsed}`);
+  logger.log(`[ChatPage] Rendering. isLoadingSessions: ${isLoadingSessions}, activeSessionId: ${activeSessionId}, activeSession model: ${activeSession?.modelUsed}`);
   
   if (!isValidModelId && attemptedModelId) {
     return <InvalidModelError modelId={attemptedModelId} />;

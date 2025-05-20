@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Send } from 'lucide-react';
 import { useChatToasts } from '@/hooks/useChatToasts';
 import { Message } from '@/types/chat';
+import { logger } from '@/utils/logger'; // Added logger import
 
 interface ChatInterfaceProps {
   messages: Message[];
@@ -26,7 +27,7 @@ const ChatInterface = ({
   onRegenerateResponse,
   onToggleSaveMessage,
 }: ChatInterfaceProps) => {
-  console.log(`[ChatInterface] Rendering with currentModel: ${currentModel}, number of messages: ${messages.length}, isAiTyping: ${isAiTyping}`);
+  logger.log(`[ChatInterface] Rendering with currentModel: ${currentModel}, number of messages: ${messages.length}, isAiTyping: ${isAiTyping}`);
   
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);

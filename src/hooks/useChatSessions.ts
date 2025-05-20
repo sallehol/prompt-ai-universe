@@ -3,6 +3,8 @@ import { useSessionPersistence } from './useSessionPersistence';
 import { useActiveSessionManager } from './useActiveSessionManager';
 import { useSessionMutations } from './useSessionMutations';
 import { useMessageManager } from './useMessageManager';
+// Removed logger import as no logs are active in this file after cleanup.
+// If logs are re-added, import { logger } from '@/utils/logger';
 
 export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
   const {
@@ -39,12 +41,13 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
   const activeSession = persistedSessions.find(session => session.id === activeSessionId) || null;
   const sortedSessions = [...persistedSessions].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 
-  // Log activeSession details when it changes or sessions change
+  // Commented-out useEffect with console.log has been removed as part of cleanup.
+  // If it were active, it would be:
   // useEffect(() => {
   //   if (activeSession) {
-  //     console.log(`[useChatSessions] Orchestrator: Active session ID: ${activeSession.id}, Model: ${activeSession.modelUsed}, Messages: ${activeSession.messages.length}`);
+  //     logger.log(`[useChatSessions] Orchestrator: Active session ID: ${activeSession.id}, Model: ${activeSession.modelUsed}, Messages: ${activeSession.messages.length}`);
   //   } else if (!isLoadingSessions) {
-  //     console.log(`[useChatSessions] Orchestrator: No active session.`);
+  //     logger.log(`[useChatSessions] Orchestrator: No active session.`);
   //   }
   // }, [activeSession, isLoadingSessions]);
 
@@ -73,4 +76,3 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
     toggleSaveMessage: messageManagerActions.toggleSaveMessage,
   };
 };
-

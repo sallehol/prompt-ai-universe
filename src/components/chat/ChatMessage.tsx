@@ -1,11 +1,10 @@
-
 import React from 'react';
-// Removed erroneous import: import { Message } from './ChatInterface';
 import { cn } from '@/lib/utils';
 import { User, Bot, Cpu, Copy, RefreshCw, Star, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getModelById } from '@/data/aiModels';
+import { logger } from '@/utils/logger';
 
 // Local interface to define the structure of the 'message' prop AS PASSED BY ChatInterface.tsx
 // This matches the object structure ChatInterface creates.
@@ -31,7 +30,7 @@ const ChatMessage = ({ message, onCopyToClipboard, onRegenerateResponse, onToggl
   const [isCopied, setIsCopied] = React.useState(false);
 
   // Log based on the received props
-  console.log(`[ChatMessage] Rendering ID ${message.id}, sender: ${message.sender}, model: ${message.model}, text: "${message.text.substring(0, 20)}..."`);
+  logger.log(`[ChatMessage] Rendering ID ${message.id}, sender: ${message.sender}, model: ${message.model}, text: "${message.text.substring(0, 20)}..."`);
 
   const handleCopy = () => {
     onCopyToClipboard(message.text); // message.text is correct here due to ChatMessageDisplayData
@@ -130,4 +129,3 @@ const ChatMessage = ({ message, onCopyToClipboard, onRegenerateResponse, onToggl
 };
 
 export default ChatMessage;
-
