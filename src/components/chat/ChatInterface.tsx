@@ -59,7 +59,9 @@ const ChatInterface = ({
     const message = messages.find(msg => msg.id === messageId);
     onToggleSaveMessage(messageId); 
     if (message) {
-        showSaveToggleToast(message.isSaved); // Note: This will show the toast based on the state *before* toggle
+        // Note: This will show the toast based on the state *before* toggle
+        // To show based on new state, the logic would need to be in useMessageManager or ChatPage
+        showSaveToggleToast(message.isSaved); 
     }
   };
 
@@ -73,8 +75,8 @@ const ChatInterface = ({
 
       {/* Message area with scroll */}
       <ScrollArea className="flex-grow p-4 md:p-6 overflow-y-auto" ref={scrollAreaRef}>
-        {/* Removed h-full from this div to allow natural content height for scrolling */}
-        <div ref={viewportRef} className="space-y-4 max-w-3xl mx-auto pb-2">
+        {/* Added pb-24 (padding-bottom: 6rem) to ensure last message is not hidden by the input area */}
+        <div ref={viewportRef} className="space-y-4 max-w-3xl mx-auto pb-24">
           {messages.map((msg) => (
             <ChatMessage
               key={msg.id}
@@ -93,7 +95,7 @@ const ChatInterface = ({
         <Button
           variant="outline"
           size="icon"
-          className="absolute bottom-20 right-6 md:right-8 bg-card/80 hover:bg-card border-border text-light-text rounded-full z-10 animate-fade-in"
+          className="absolute bottom-24 right-6 md:right-8 bg-card/80 hover:bg-card border-border text-light-text rounded-full z-10 animate-fade-in" // Adjusted bottom position due to padding
           onClick={() => scrollToBottom('smooth')}
           aria-label="Scroll to bottom"
         >
@@ -102,6 +104,7 @@ const ChatInterface = ({
       )}
 
       {/* Message input area - ensuring this is always visible */}
+      {/* This div structure with flex-shrink-0 and mt-auto in a flex-col parent should stick it to the bottom */}
       <div className="max-w-3xl mx-auto w-full px-4 md:px-6 flex-shrink-0 mt-auto pb-4">
         <MessageInput onSendMessage={onSendMessage} />
       </div>
@@ -110,3 +113,4 @@ const ChatInterface = ({
 };
 
 export default ChatInterface;
+
