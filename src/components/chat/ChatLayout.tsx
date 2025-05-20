@@ -14,6 +14,8 @@ import { Session } from '@/types/chat';
 // import { useIsMobile } from '@/hooks/use-mobile'; // Not used in the new simpler layout
 import { getModelById } from '@/data/aiModels';
 import { toast } from '@/components/ui/use-toast'; // Corrected path for toast
+import { Button } from '@/components/ui/button'; // Added import
+import { Plus } from 'lucide-react'; // Added import
 
 interface ChatLayoutProps {
   sessions: Session[];
@@ -107,8 +109,13 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
             onToggleSaveMessage={toggleSaveMessage}
           />
         ) : (
-          // Adjust EmptyState to match its expected prop type for onCreateSession (void return)
-          <EmptyState onCreateSession={() => { createSession(); }} />
+          <EmptyState
+            actionButton={
+              <Button onClick={() => createSession()}>
+                <Plus size={16} className="mr-2" /> Start New Chat
+              </Button>
+            }
+          />
         )}
       </div>
     </div>
