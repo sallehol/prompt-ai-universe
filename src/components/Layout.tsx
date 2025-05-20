@@ -6,7 +6,10 @@ const Layout = () => {
   return (
     <div 
       className="min-h-screen flex flex-col bg-deep-bg text-light-text"
-      style={{ "--navbar-height": "4rem" } as React.CSSProperties}
+      style={{ 
+        "--navbar-height": "4rem",
+        "--footer-height": "4.5rem" // Added footer height variable 
+      } as React.CSSProperties}
     >
       <Navbar />
       <main className="flex-grow container mx-auto px-6 py-8 flex flex-col"> {/* Added flex flex-col for children to use h-full if needed */}

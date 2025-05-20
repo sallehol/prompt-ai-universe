@@ -88,7 +88,7 @@ const ChatInterface = ({
   const combinedFixedElementsHeight = "130px";
 
   return (
-    <div className="flex flex-col h-full w-full bg-deep-bg text-light-text chat-container">
+    <div className="flex flex-col h-full w-full bg-deep-bg text-light-text chat-container" style={{ minHeight: '100%' }}>
       {/* Fixed header with precise border and height */}
       <div className="flex-shrink-0 border-b border-border flex justify-between items-center bg-card chat-header px-4">
         <h2 className="text-xl font-semibold text-neon-cyan">AI Chat</h2>
@@ -98,10 +98,11 @@ const ChatInterface = ({
       {/* Scrollable messages container - ONLY THIS PART SCROLLS */}
       <div 
         ref={messagesContainerRef}
-        className="py-4 px-4 md:px-6 space-y-4 messages-area"
+        className="py-4 px-4 md:px-6 space-y-4 messages-area flex-1"
         style={{ 
           height: `calc(100% - ${combinedFixedElementsHeight})`,
           overflowY: 'auto',
+          minHeight: '0', // This helps flex children respect parent constraints
         }}
       >
         <div className="max-w-3xl mx-auto w-full">
