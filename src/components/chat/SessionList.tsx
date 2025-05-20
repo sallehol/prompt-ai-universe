@@ -84,11 +84,11 @@ const SessionList: React.FC<SessionListProps> = ({
               </div>
               <div className="flex-shrink-0 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <DialogTrigger asChild>
-                  <Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); handleStartEdit(session); }}>
+                  <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleStartEdit(session); }}>
                     <Edit3 size={14} />
                   </Button>
                 </DialogTrigger>
-                <Button variant="ghost" size="icon-xs" className="hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }}>
+                <Button variant="ghost" size="icon" className="hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }}>
                   <Trash2 size={14} />
                 </Button>
               </div>
