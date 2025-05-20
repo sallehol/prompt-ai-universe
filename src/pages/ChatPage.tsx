@@ -164,6 +164,7 @@ const ChatPage = () => {
                 const newSessionId = createSession();
                 console.log(`[ChatPage] User initiated new session: ${newSessionId}`);
                 // Potentially switch to this new session or let useChatSessions handle it
+                return newSessionId; // Ensure the new session ID is returned
               }}
               onSwitchSession={switchSession}
               onRenameSession={renameSession}
