@@ -1,3 +1,4 @@
+
 import React from 'react';
 import SessionList from '@/components/chat/SessionList';
 import ChatInterface from '@/components/chat/ChatInterface';
@@ -46,7 +47,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
   return (
     <div className="flex h-full w-full overflow-hidden">
       {/* Sidebar with session list - with precise border styling and dimensions */}
-      <div className="w-[287px] h-[525px] flex-shrink-0 bg-card border-r border-border overflow-hidden">
+      <div className="w-[287px] h-[550px] flex-shrink-0 bg-card border-r border-border overflow-hidden">
         <SessionList
           sessions={sessions}
           activeSessionId={activeSessionId}
@@ -106,3 +107,4 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
 };
 
 export default ChatLayout;
+
