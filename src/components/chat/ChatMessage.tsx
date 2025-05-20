@@ -1,5 +1,7 @@
 
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Message } from './ChatInterface'; // Import the Message type
 import { cn } from '@/lib/utils';
 import { User, Bot } from 'lucide-react'; // Icons for user and AI
@@ -20,7 +22,7 @@ const ChatMessage = ({ message }: { message: Message }) => {
       )}>
         {isUser ? <User size={20} /> : <Bot size={20} />}
       </div>
-      <div className="flex flex-col">
+      <div className="flex flex-col min-w-0"> {/* Added min-w-0 to prevent overflow issues with long markdown content */}
         <p className={cn('text-sm font-medium', isUser ? 'text-light-text text-right' : 'text-light-text')}>
           {isUser ? 'You' : 'AI Model'}
         </p>
@@ -30,7 +32,13 @@ const ChatMessage = ({ message }: { message: Message }) => {
              isUser ? 'text-light-text/90' : 'text-light-text/90'
           )}
         >
-          {message.text} 
+          {isUser ? (
+            message.text
+          ) : (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.text}
+            </ReactMarkdown>
+          )}
         </div>
         <p className={cn("text-xs mt-1", isUser ? "text-medium-text/70 text-right" : "text-medium-text/70")}>
           {message.timestamp.toLocaleTimeString()}
