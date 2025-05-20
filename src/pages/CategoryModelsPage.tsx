@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, ArrowLeft } from 'lucide-react';
+import { ChevronRight, ArrowLeft, Sparkles } from 'lucide-react';
 import { Model, getModelsByCategory, getCategoryInfo, modelCategoryDetails } from '@/data/aiModels';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,10 +11,11 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"; // Import Card components
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 const ModelCard = ({ model }: { model: Model }) => {
-  const CategoryIcon = modelCategoryDetails[model.categoryKey]?.icon || Sparkles; // Fallback icon
+  // Use optional chaining and provide a default icon (Sparkles)
+  const CategoryIcon = modelCategoryDetails[model.categoryKey]?.icon || Sparkles;
 
   return (
     <Card className="bg-card/50 shadow-lg hover:shadow-xl transition-shadow duration-300 border border-border hover:border-neon-cyan flex flex-col h-full">
@@ -30,9 +30,6 @@ const ModelCard = ({ model }: { model: Model }) => {
       </CardHeader>
       <CardContent className="flex-grow flex flex-col">
         <p className="text-sm text-medium-text mb-4 flex-grow line-clamp-3">{model.description || "No description available."}</p>
-        {/* Placeholders for future API status/subscription tier indicators */}
-        {/* <p className="text-xs text-gray-400">API Status: Available</p> */}
-        {/* <p className="text-xs text-yellow-400">Tier: Premium</p> */}
         <Button 
           asChild 
           className="w-full mt-auto bg-neon-cyan text-deep-bg hover:bg-cyan-300"

@@ -1,6 +1,5 @@
-
-import React from 'react'; // Add React for React.ComponentType
-import { Brain, Code, ImageIcon, Film, Mic, BarChart3, LayoutDashboard, Database, Sparkles, Cpu } from 'lucide-react';
+import React from 'react';
+import { Brain, Code, ImageIcon, Film, Mic, BarChart3, LayoutDashboard, Sparkles, Cpu, LucideProps } from 'lucide-react';
 
 export interface Model {
   id: string;
@@ -17,8 +16,8 @@ export interface ModelCategoryInfo {
   key: string; // e.g., "text"
   name: string; // e.g., "Text Models (LLMs)"
   description: string; // For ModelCatalogPage card
-  icon: React.ComponentType<{ size?: number, className?: string }>;
-  modelCountLabel?: string; // For ModelCatalogPage card (e.g. "Models like GPT-4o, Claude 3.5...")
+  icon: React.FC<LucideProps>; // Changed type to React.FC<LucideProps>
+  modelCountLabel?: string; // For ModelCatalogPage card (e.g. "Models like GPT-4o, Claude 3.7...")
 }
 
 // Define categories
@@ -128,4 +127,3 @@ export const getCategoryInfo = (categoryKey: string): ModelCategoryInfo | undefi
 export const getAllCategoriesArray = (): ModelCategoryInfo[] => {
     return Object.values(modelCategoryDetails);
 };
-
