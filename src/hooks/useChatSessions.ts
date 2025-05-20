@@ -1,138 +1,98 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Session } from '@/types/chat';
-import { Message } from '@/components/chat/ChatInterface'; // Assuming Message is exported
-
-const LOCAL_STORAGE_KEY = 'chatSessions_v1';
-
-const createNewMessage = (text: string, sender: 'user' | 'ai', model?: string): Message => ({
-  id: Date.now().toString() + Math.random().toString(36).substring(2,7), // More unique ID
-  text,
-  sender,
-  timestamp: new Date(),
-  model,
-  isSaved: false,
-});
-
-const createInitialSession = (model: string = 'gpt-4o-mini'): Session => {
-  const now = Date.now();
-  return {
-    id: now.toString(),
-    name: 'New Chat',
-    createdAt: now,
-    lastActivityAt: now,
-    messages: [createNewMessage('Hello! How can I help you today?', 'ai', model)],
-    modelUsed: model,
-  };
-};
+// Message type is still needed if createNewMessage is used here, but it's moved
+// import { Message } from '@/components/chat/ChatInterface'; 
+import { createNewMessage, createInitialSession } from '@/lib/chatUtils';
+import { useSessionPersistence } from './useSessionPersistence';
 
 export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const { 
+    persistedSessions, 
+    updateAndPersistSessions, 
+    isLoadingSessions,
+    initializeDefaultSessionIfNeeded,
+  } = useSessionPersistence(initialModel);
+  
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [isAiTypingInHook, setIsAiTypingInHook] = useState<boolean>(false); // Renamed to avoid conflict
+  const [isAiTypingInHook, setIsAiTypingInHook] = useState<boolean>(false);
 
+  // Initialize activeSessionId once sessions are loaded
   useEffect(() => {
-    try {
-      const storedSessions = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (storedSessions) {
-        const parsedSessions = JSON.parse(storedSessions) as Session[];
-        // Ensure messages have Date objects
-        parsedSessions.forEach(session => {
-          session.messages = session.messages.map(msg => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }));
-        });
-        setSessions(parsedSessions);
-        if (parsedSessions.length > 0) {
-          // Make the most recent session active
-          const sortedSessions = [...parsedSessions].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
-          setActiveSessionId(sortedSessions[0].id);
-        } else {
-          const newSession = createInitialSession(initialModel);
-          setSessions([newSession]);
-          setActiveSessionId(newSession.id);
-        }
+    if (!isLoadingSessions) {
+      if (persistedSessions.length > 0) {
+        const sortedSessions = [...persistedSessions].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+        setActiveSessionId(sortedSessions[0].id);
       } else {
-        const newSession = createInitialSession(initialModel);
-        setSessions([newSession]);
-        setActiveSessionId(newSession.id);
+        // If no sessions, try to initialize one
+        const newSessionId = initializeDefaultSessionIfNeeded();
+        if (newSessionId) {
+            setActiveSessionId(newSessionId);
+        }
       }
-    } catch (error) {
-      console.error("Failed to load sessions from localStorage:", error);
-      const newSession = createInitialSession(initialModel);
-      setSessions([newSession]);
-      setActiveSessionId(newSession.id);
     }
-  }, [initialModel]);
+  }, [persistedSessions, isLoadingSessions, initializeDefaultSessionIfNeeded]);
 
-  useEffect(() => {
-    if (sessions.length > 0) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sessions));
-    } else {
-      // If all sessions are deleted, clear local storage for this key
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-    }
-  }, [sessions]);
 
   const createSession = useCallback(() => {
-    const modelForNewSession = activeSessionId 
-      ? sessions.find(s => s.id === activeSessionId)?.modelUsed || initialModel
+    const modelForNewSession = activeSessionId
+      ? persistedSessions.find(s => s.id === activeSessionId)?.modelUsed || initialModel
       : initialModel;
     const newSession = createInitialSession(modelForNewSession);
-    setSessions(prev => [...prev, newSession]);
+    
+    updateAndPersistSessions(prev => [...prev, newSession]);
     setActiveSessionId(newSession.id);
     return newSession.id;
-  }, [initialModel, activeSessionId, sessions]);
+  }, [initialModel, activeSessionId, persistedSessions, updateAndPersistSessions]);
 
   const switchSession = useCallback((sessionId: string) => {
     setActiveSessionId(sessionId);
   }, []);
 
   const renameSession = useCallback((sessionId: string, newName: string) => {
-    setSessions(prev =>
+    updateAndPersistSessions(prev =>
       prev.map(session =>
         session.id === sessionId ? { ...session, name: newName, lastActivityAt: Date.now() } : session
       )
     );
-  }, []);
+  }, [updateAndPersistSessions]);
 
   const deleteSession = useCallback((sessionId: string) => {
-    setSessions(prev => {
+    updateAndPersistSessions(prev => {
       const remainingSessions = prev.filter(session => session.id !== sessionId);
       if (activeSessionId === sessionId) {
         if (remainingSessions.length > 0) {
           const sortedRemaining = [...remainingSessions].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
           setActiveSessionId(sortedRemaining[0].id);
         } else {
-          // If deleting the last session, create a new one
           const newSession = createInitialSession(initialModel);
           setActiveSessionId(newSession.id);
-          return [newSession]; // Return array with the new session
+          return [newSession]; // This becomes the new state for sessions
         }
       }
       return remainingSessions;
     });
-  }, [activeSessionId, initialModel]);
+  }, [activeSessionId, initialModel, updateAndPersistSessions]);
 
   const clearSessionMessages = useCallback((sessionId: string) => {
-    setSessions(prev =>
+    updateAndPersistSessions(prev =>
       prev.map(session => {
         if (session.id === sessionId) {
+          const currentModel = session.modelUsed;
           return {
             ...session,
-            messages: [createNewMessage('Hello! How can I help you today?', 'ai', session.modelUsed)],
+            messages: [createNewMessage('Hello! How can I help you today?', 'ai', currentModel)],
             lastActivityAt: Date.now(),
-            name: session.name === "New Chat" || session.messages.length <= 1 ? "New Chat" : session.name // Reset name if it was auto-generated potentially
+            name: session.name === "New Chat" || session.messages.length <= 1 ? "New Chat" : session.name
           };
         }
         return session;
       })
     );
-  }, []);
+  }, [updateAndPersistSessions]);
 
   const addMessageToSession = useCallback((sessionId: string, text: string, sender: 'user' | 'ai', modelOverride?: string) => {
-    setSessions(prevSessions => {
+    updateAndPersistSessions(prevSessions => {
       const now = Date.now();
       return prevSessions.map(session => {
         if (session.id === sessionId) {
@@ -149,57 +109,60 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
             messages: [...session.messages, newMessage],
             lastActivityAt: now,
             name: newName,
-            modelUsed: modelForMessage // Ensure modelUsed is updated if overridden
+            modelUsed: modelForMessage
           };
         }
         return session;
       });
     });
-  }, []);
+  }, [updateAndPersistSessions]);
   
   const updateSessionModel = useCallback((sessionId: string, model: string) => {
-    setSessions(prev =>
+    updateAndPersistSessions(prev =>
       prev.map(session =>
         session.id === sessionId ? { ...session, modelUsed: model, lastActivityAt: Date.now() } : session
       )
     );
-  }, []);
+  }, [updateAndPersistSessions]);
 
-  const activeSession = sessions.find(session => session.id === activeSessionId) || null;
+  const activeSession = persistedSessions.find(session => session.id === activeSessionId) || null;
 
   const handleSendMessage = useCallback(async (text: string) => {
     if (!activeSessionId || text.trim() === '') return;
 
+    // Optimistically get the current session model before adding the user message
+    // This ensures the AI response uses the model active at the time of sending.
+    const sessionBeforeUserMessage = persistedSessions.find(s => s.id === activeSessionId);
+    const modelForResponse = sessionBeforeUserMessage?.modelUsed || initialModel;
+
     addMessageToSession(activeSessionId, text, 'user');
     setIsAiTypingInHook(true);
 
-    // Simulate AI response
     setTimeout(() => {
-      const currentSessionForResponse = sessions.find(s => s.id === activeSessionId);
-      if (currentSessionForResponse) {
-        const aiResponseText = `Simulated response from ${currentSessionForResponse.modelUsed} to: "${text}"`;
-        addMessageToSession(activeSessionId, aiResponseText, 'ai', currentSessionForResponse.modelUsed);
-      }
+      // No need to find session again, use modelForResponse captured earlier
+      const aiResponseText = `Simulated response from ${modelForResponse} to: "${text}"`;
+      addMessageToSession(activeSessionId, aiResponseText, 'ai', modelForResponse);
       setIsAiTypingInHook(false);
     }, 1500);
-  }, [activeSessionId, addMessageToSession, sessions]);
+  }, [activeSessionId, addMessageToSession, persistedSessions, initialModel]);
 
   const regenerateResponse = useCallback(async (messageIdToRegenerate: string) => {
     if (!activeSessionId) return;
-
-    const currentSession = sessions.find(s => s.id === activeSessionId);
+    
+    // Find session state *before* removing the message to get userPrompt & model
+    const currentSession = persistedSessions.find(s => s.id === activeSessionId);
     if (!currentSession) return;
     
     const messageIndex = currentSession.messages.findIndex(msg => msg.id === messageIdToRegenerate);
     if (messageIndex === -1 || currentSession.messages[messageIndex].sender !== 'ai') return;
 
-    const userPromptMessageIndex = messageIndex -1;
+    const userPromptMessageIndex = messageIndex - 1;
     if (userPromptMessageIndex < 0 || currentSession.messages[userPromptMessageIndex].sender !== 'user') return;
     
     const userPrompt = currentSession.messages[userPromptMessageIndex].text;
+    const modelForRegeneration = currentSession.modelUsed;
 
-    // Remove old AI response
-    setSessions(prevSessions => prevSessions.map(s => {
+    updateAndPersistSessions(prevSessions => prevSessions.map(s => {
       if (s.id === activeSessionId) {
         return {
           ...s,
@@ -213,19 +176,16 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
     setIsAiTypingInHook(true);
 
     setTimeout(() => {
-      const updatedSessionForResponse = sessions.find(s => s.id === activeSessionId); // get latest session state
-      if (updatedSessionForResponse) {
-        const regeneratedResponseText = `(Regenerated) New response from ${updatedSessionForResponse.modelUsed} to: "${userPrompt}"`;
-        addMessageToSession(activeSessionId, regeneratedResponseText, 'ai', updatedSessionForResponse.modelUsed);
-      }
+      const regeneratedResponseText = `(Regenerated) New response from ${modelForRegeneration} to: "${userPrompt}"`;
+      addMessageToSession(activeSessionId, regeneratedResponseText, 'ai', modelForRegeneration);
       setIsAiTypingInHook(false);
     }, 1500);
 
-  }, [activeSessionId, sessions, addMessageToSession]);
+  }, [activeSessionId, persistedSessions, addMessageToSession, updateAndPersistSessions]);
 
   const toggleSaveMessage = useCallback((messageId: string) => {
      if (!activeSessionId) return;
-     setSessions(prevSessions => prevSessions.map(s => {
+     updateAndPersistSessions(prevSessions => prevSessions.map(s => {
       if (s.id === activeSessionId) {
         return {
           ...s,
@@ -235,24 +195,24 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
       }
       return s;
     }));
-    // Toast logic would ideally be here or in ChatInterface based on this state change
-  }, [activeSessionId]);
+  }, [activeSessionId, updateAndPersistSessions]);
 
 
   return {
-    sessions: sessions.sort((a,b) => b.lastActivityAt - a.lastActivityAt), // Always return sorted
+    sessions: persistedSessions.sort((a,b) => b.lastActivityAt - a.lastActivityAt),
     activeSession,
     activeSessionId,
     isAiTyping: isAiTypingInHook,
+    isLoadingSessions, // Expose loading state if UI needs it
     createSession,
     switchSession,
     renameSession,
     deleteSession,
     clearSessionMessages,
-    addMessageToSession, // exposing for ChatInterface to directly use if needed for more complex scenarios
+    // addMessageToSession is not directly exposed if handleSendMessage covers all needs
     updateSessionModel,
-    handleSendMessage, // for MessageInput
-    regenerateResponse, // for ChatMessage actions
-    toggleSaveMessage, // for ChatMessage actions
+    handleSendMessage,
+    regenerateResponse,
+    toggleSaveMessage,
   };
 };
