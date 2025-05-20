@@ -1,1 +1,9 @@
+
 project_id = "zxpywvtgpfqyazabsvlb"
+
+# Defines the ai-proxy edge function.
+# By default, verify_jwt is true, meaning requests need a valid Supabase JWT.
+[functions.ai-proxy]
+# Add any specific configuration for ai-proxy here if needed in the future
+# e.g., verify_jwt = false (if it were a public webhook)
+# timeout_ms = 10000 (if a longer timeout is needed)
