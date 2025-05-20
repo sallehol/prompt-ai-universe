@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import ChatMessage from './ChatMessage';
 import ModelSelector from './ModelSelector';
@@ -82,15 +81,15 @@ const ChatInterface = ({
     }
   };
 
-  // Estimate header height (p-4 + content) ~60-68px. Let's use 68px.
-  // Estimate input area height (p-4 + input) ~72px. Let's use 72px.
-  // Total fixed height = 68px + 72px = 140px. This matches user's calc.
-  const combinedFixedElementsHeight = "140px";
+  // Header height target: 71px.
+  // Input area height (p-4 + input + border): approx 73px (16+40+16+1).
+  // New combinedFixedElementsHeight = 71px + 73px = 144px.
+  const combinedFixedElementsHeight = "144px";
 
   return (
     <div className="flex flex-col h-full w-full bg-deep-bg text-light-text chat-container">
-      {/* Fixed header with precise border */}
-      <div className="flex-shrink-0 p-4 border-b border-border flex justify-between items-center bg-card">
+      {/* Fixed header with precise border and height */}
+      <div className="flex-shrink-0 border-b border-border flex justify-between items-center bg-card chat-header px-4">
         <h2 className="text-xl font-semibold text-neon-cyan">AI Chat</h2>
         <ModelSelector selectedModel={currentModel} onSelectModel={onSelectModel} />
       </div>

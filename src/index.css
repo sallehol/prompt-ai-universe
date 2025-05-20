@@ -106,4 +106,16 @@
   .border-l {
     @apply border-border;
   }
+
+  /* Chat header specific height */
+  .chat-header {
+    height: 71px;
+  }
+
+  @media (max-width: 768px) {
+    .chat-header {
+      height: 71px; /* Maintain consistent height on mobile */
+    }
+  }
 }
+
