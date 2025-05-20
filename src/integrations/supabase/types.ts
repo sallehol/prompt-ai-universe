@@ -9,13 +9,64 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      api_keys: {
+        Row: {
+          created_at: string | null
+          encrypted_key: string
+          id: string
+          provider: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          encrypted_key: string
+          id?: string
+          provider: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          encrypted_key?: string
+          id?: string
+          provider?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      decrypt_api_key: {
+        Args: { p_encrypted_key: string }
+        Returns: string
+      }
+      delete_api_key: {
+        Args: { p_user_id: string; p_provider: string }
+        Returns: boolean
+      }
+      encrypt_api_key: {
+        Args: { p_api_key: string }
+        Returns: string
+      }
+      get_api_key: {
+        Args: { p_user_id: string; p_provider: string }
+        Returns: string
+      }
+      list_api_keys: {
+        Args: { p_user_id: string }
+        Returns: {
+          provider: string
+        }[]
+      }
+      store_api_key: {
+        Args: { p_user_id: string; p_provider: string; p_api_key: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
