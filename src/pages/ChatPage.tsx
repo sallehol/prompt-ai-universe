@@ -44,7 +44,7 @@ const ChatPage = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-var(--navbar-height))] overflow-hidden"> {/* Adjusted height and added overflow-hidden */}
+    <div className="h-[calc(100vh-var(--navbar-height))] overflow-hidden">
       <ChatLayout
         sessions={sessions}
         activeSession={activeSession}

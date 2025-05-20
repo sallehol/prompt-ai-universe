@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Session, Message } from '@/types/chat'; // Message type for session.messages
 import { Button } from '@/components/ui/button';
@@ -163,18 +162,20 @@ const SessionList: React.FC<SessionListProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-card border-r border-border"> {/* Removed text-sm, item will handle */}
-      <div className="p-3">
+    <div className="flex flex-col h-full bg-card border-r border-border">
+      {/* Fixed header with New Chat button */}
+      <div className="p-3 flex-shrink-0">
         <Button
           onClick={handleNewChat}
           className="w-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center gap-2"
-          variant="default" // Kept default variant as per user's original working button
+          variant="default"
         >
           <Plus size={16} className="stroke-[2.5px]" /> New chat
         </Button>
       </div>
       
-      <ScrollArea className="flex-grow"> {/* Removed px-1, item has mx-1 */}
+      {/* Scrollable session list */}
+      <ScrollArea className="flex-grow">
         {renderSessionGroup('Today', sessionGroups.today)}
         {renderSessionGroup('Yesterday', sessionGroups.yesterday)}
         {renderSessionGroup('Previous 7 Days', sessionGroups.previous7Days)}
@@ -184,7 +185,8 @@ const SessionList: React.FC<SessionListProps> = ({
         )}
       </ScrollArea>
       
-      <div className="p-3 border-t border-border mt-auto">
+      {/* Fixed footer with Clear Current Chat button */}
+      <div className="p-3 border-t border-border mt-auto flex-shrink-0">
         <Button
           onClick={() => activeSessionId && onClearCurrentChat(activeSessionId)}
           variant="ghost"
