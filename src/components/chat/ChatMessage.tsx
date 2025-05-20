@@ -1,11 +1,10 @@
-
 import React from 'react';
 import { Message } from './ChatInterface';
 import { cn } from '@/lib/utils';
 import { User, Bot, Cpu, Copy, RefreshCw, Star, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { getModelById } from '@/data/aiModels'; // Import getModelById
+import { getModelById } from '@/data/aiModels';
 
 interface ChatMessageProps {
   message: Message;
@@ -18,17 +17,16 @@ const ChatMessage = ({ message, onCopyToClipboard, onRegenerateResponse, onToggl
   const isUser = message.sender === 'user';
   const [isCopied, setIsCopied] = React.useState(false);
 
-  // console.log(`[ChatMessage] Rendering ID ${message.id}, sender: ${message.sender}, model: ${message.model}, text: "${message.text.substring(0, 20)}..."`);
+  console.log(`[ChatMessage] Rendering ID ${message.id}, sender: ${message.sender}, model: ${message.model}, text: "${message.text.substring(0, 20)}..."`);
 
   const handleCopy = () => {
     onCopyToClipboard(message.text);
     setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000); // Reset icon after 2 seconds
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
   const modelDetails = message.model ? getModelById(message.model) : null;
-  const displayModelName = modelDetails ? modelDetails.name : (message.model ? message.model.replace('gpt-4o-mini', '4o Mini').replace('gpt-4o', '4o') : 'N/A');
-
+  const displayModelName = modelDetails?.name || (message.model ? message.model.replace('gpt-4o-mini', '4o Mini').replace('gpt-4o', '4o') : 'N/A');
 
   return (
     <div
@@ -47,7 +45,7 @@ const ChatMessage = ({ message, onCopyToClipboard, onRegenerateResponse, onToggl
           "flex-shrink-0 p-2 rounded-full",
           isUser ? 'bg-bright-purple/20 text-bright-purple' : 'bg-neon-cyan/20 text-neon-cyan'
         )}>
-          {isUser ? <User size={20} /> : (modelDetails?.icon ? <modelDetails.icon size={20} /> : <Bot size={20} />)}
+          {isUser ? <User size={20} /> : <Bot size={20} />}
         </div>
         <div className="flex flex-col min-w-0 flex-grow">
           <div className={cn("flex items-center", isUser ? "justify-end" : "justify-start")}>
@@ -56,7 +54,7 @@ const ChatMessage = ({ message, onCopyToClipboard, onRegenerateResponse, onToggl
             </p>
             {!isUser && message.model && (
               <div className="flex items-center text-xs text-medium-text/70 ml-2" title={`Model: ${displayModelName}`}>
-                {modelDetails?.icon ? <modelDetails.icon size={12} className="mr-1" /> : <Cpu size={12} className="mr-1" />}
+                <Cpu size={12} className="mr-1" />
                 <span>{displayModelName}</span>
               </div>
             )}
@@ -67,8 +65,6 @@ const ChatMessage = ({ message, onCopyToClipboard, onRegenerateResponse, onToggl
                isUser ? 'text-light-text/90' : 'text-light-text/90'
             )}
           >
-            {/* Forcing a re-render check with a random number - temporary for debugging if needed */}
-            {/* {message.text} {Math.random()} */}
             {message.text}
           </div>
           <div className="flex items-center justify-between mt-1">
