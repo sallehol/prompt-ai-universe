@@ -3,12 +3,13 @@ import SessionList from '@/components/chat/SessionList';
 import ChatInterface from '@/components/chat/ChatInterface';
 import EmptyState from '@/components/chat/EmptyState';
 import { Session } from '@/types/chat';
-import { getModelById } from '@/data/aiModels';
+import { getModelById } from '@/data/aiModels'; // getModelById might still be useful for other model details if not in modelConfig
 import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { logger } from '@/utils/logger';
 import { ApiError } from '@/api/clients/base.client';
+import { getModelConfig } from '@/config/modelConfig'; // Import for model display name
 
 interface ChatLayoutProps {
   sessions: Session[];
@@ -16,7 +17,7 @@ interface ChatLayoutProps {
   activeSessionId: string | null;
   isAiTyping: boolean;
   isError: boolean;
-  errorDetails?: ApiError | null;
+  errorDetails?: ApiError | null; // Type updated to ApiError
   createSession: () => string;
   switchSession: (id: string) => void;
   renameSession: (id: string, name: string) => void;
@@ -36,7 +37,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
   activeSessionId,
   isAiTyping,
   isError,
-  errorDetails,
+  errorDetails, // Already ApiError | null from props
   createSession,
   switchSession,
   renameSession,
@@ -77,17 +78,17 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
             currentModel={selectedModelForActiveSession}
             isAiTyping={isAiTyping}
             isError={isError}
-            errorDetails={errorDetails ? { type: errorDetails.type, message: errorDetails.message } : undefined}
+            errorDetails={errorDetails ?? undefined} // Pass the full ApiError object
             onSendMessage={handleSendMessage}
             onSelectModel={(modelId) => {
               if (activeSessionId) {
                 logger.log(`[ChatLayout] onSelectModel: User selected ${modelId} for session ${activeSessionId}. Current model: ${activeSession.modelUsed}`);
                 updateSessionModel(activeSessionId, modelId);
                 
-                const modelDetails = getModelById(modelId);
+                const modelDetails = getModelConfig(modelId); // Use getModelConfig for display name
                 toast({
                   title: "Model Updated",
-                  description: `Chat model changed to ${modelDetails?.name || modelId}.`,
+                  description: `Chat model changed to ${modelDetails?.displayName || modelId}.`,
                 });
               } else {
                 logger.error("[ChatLayout] onSelectModel: No active session to update model for.");

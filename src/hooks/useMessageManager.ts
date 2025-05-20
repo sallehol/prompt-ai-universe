@@ -3,8 +3,9 @@ import { Session, Message } from '@/types/chat';
 import { createNewMessage } from '@/lib/chatUtils';
 import { logger } from '@/utils/logger';
 import { useApiKeys } from './useApiKeys';
-import { ChatService, getProviderFromModel } from '@/services/ChatService';
+import { ChatService } from '@/services/ChatService';
 import { ApiError } from '@/api/clients/base.client';
+import { getModelConfig } from '@/config/modelConfig';
 
 type UpdateSessionsFn = (updater: (prevSessions: Session[]) => Session[]) => void;
 
@@ -72,20 +73,24 @@ export const useMessageManager = ({
 
     try {
       const modelForResponse = currentSession.modelUsed;
-      const provider = getProviderFromModel(modelForResponse);
-      const apiKey = getApiKey(provider);
+      const modelConfig = getModelConfig(modelForResponse);
+      let apiKey = '';
 
-      if (!apiKey && provider !== 'unknown_provider') {
-        logger.error(`[useMessageManager] API key for ${provider} is not set.`);
-        const authError: ApiError = {
-          type: 'auth',
-          message: `API key for ${provider} is not set. Please add your API key in settings.`,
-          status: 401,
-        };
-        throw authError;
+      if (modelConfig.requiresApiKey) {
+        apiKey = getApiKey(modelConfig.provider);
+        if (!apiKey) {
+          logger.error(`[useMessageManager] API key for ${modelConfig.provider} (model: ${modelForResponse}) is not set.`);
+          const authError: ApiError = {
+            type: 'auth',
+            message: `API key for ${modelConfig.provider} is not set. Please add your API key in settings.`,
+            status: 401,
+            data: { provider: modelConfig.provider }
+          };
+          throw authError;
+        }
       }
       
-      logger.log(`[useMessageManager] Sending to ChatService. Model: ${modelForResponse}, Provider: ${provider}`);
+      logger.log(`[useMessageManager] Sending to ChatService. Model: ${modelForResponse}, Provider: ${modelConfig.provider}, RequiresKey: ${modelConfig.requiresApiKey}, IsSimulated: ${modelConfig.isSimulated}`);
       const aiResponseMessage = await chatService.sendMessage(
         currentSession.messages,
         modelForResponse,
@@ -98,21 +103,33 @@ export const useMessageManager = ({
       logger.error('[useMessageManager] Error sending message:', err);
       setIsError(true);
       const caughtError = err as ApiError;
-      setErrorDetails({
+      
+      let finalErrorDetails: ApiError = {
         type: caughtError.type || 'unknown',
         message: caughtError.message || 'An unknown error occurred while contacting the AI.',
         status: caughtError.status || 0,
-        data: caughtError.data
-      });
+        data: caughtError.data,
+      };
+      if (finalErrorDetails.type === 'auth' && !finalErrorDetails.data?.provider && caughtError.data?.provider) {
+         finalErrorDetails.data = { ...finalErrorDetails.data, provider: caughtError.data.provider };
+      } else if (finalErrorDetails.type === 'auth' && !finalErrorDetails.data?.provider) {
+        const modelConfig = getModelConfig(currentSession.modelUsed);
+        finalErrorDetails.data = { ...finalErrorDetails.data, provider: modelConfig.provider };
+      }
+
+      setErrorDetails(finalErrorDetails);
+
       updateAndPersistSessions(prevSessions => prevSessions.map(s => {
         if (s.id === activeSessionId) {
-          const errorMessage: Message = createNewMessage(
-            `Error: ${err.message || 'Failed to get response.'}`, 
-            'assistant'
-          );
+          const errorMessageContent = finalErrorDetails.message || 'Failed to get response.';
+          const errorMessage: Message = createNewMessage(errorMessageContent, 'assistant');
           errorMessage.status = 'error';
           errorMessage.metadata = { 
-              error: { type: err.type || 'unknown', message: err.message || 'Failed to get response.'} 
+              error: { 
+                type: finalErrorDetails.type, 
+                message: errorMessageContent,
+                ...(finalErrorDetails.data?.provider && { provider: finalErrorDetails.data.provider })
+              } 
           };
           return { ...s, messages: [...s.messages, errorMessage] };
         }
@@ -195,7 +212,8 @@ export const useMessageManager = ({
     }
     
     const modelForRegeneration = currentSession.modelUsed; 
-    logger.log(`[useMessageManager] regenerateResponse: For prompt "${userPromptText.substring(0,30)}..." using model ${modelForRegeneration}`);
+    const modelConfig = getModelConfig(modelForRegeneration);
+    logger.log(`[useMessageManager] regenerateResponse: For prompt "${userPromptText.substring(0,30)}..." using model ${modelConfig.displayName} (${modelConfig.provider})`);
 
     updateAndPersistSessions(prevSessions => prevSessions.map(s => {
       if (s.id === activeSessionId) {
@@ -213,9 +231,9 @@ export const useMessageManager = ({
     setErrorDetails(null);
 
     setTimeout(() => {
-      const regeneratedResponseText = `(Regenerated) New response from ${modelForRegeneration} to: "${userPromptText}"`;
+      const regeneratedResponseText = `(Regenerated) New response from ${modelConfig.displayName} to: "${userPromptText}"`;
       const regeneratedMsg = createNewMessage(regeneratedResponseText, 'assistant');
-      regeneratedMsg.metadata = { model: modelForRegeneration, provider: getProviderFromModel(modelForRegeneration) };
+      regeneratedMsg.metadata = { model: modelForRegeneration, provider: modelConfig.provider };
       addMessageToSessionInternal(activeSessionId, regeneratedMsg);
       setIsAiTyping(false);
       logger.log(`[useMessageManager] regenerateResponse: AI response regenerated (simulated).`);

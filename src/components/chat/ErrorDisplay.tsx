@@ -1,15 +1,25 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, RefreshCw } from 'lucide-react'; // These are in the allowed icons list
+import { AlertCircle, RefreshCw } from 'lucide-react';
+import { ApiError } from '@/api/clients/base.client'; // Import ApiError
 
 interface ErrorDisplayProps {
-  error: {
-    type: 'network' | 'auth' | 'request' | 'rate_limit' | 'server' | 'unknown';
-    message: string;
-  };
+  error: ApiError; // Updated to use ApiError type
   onRetry?: () => void;
 }
+
+const getProviderName = (providerId: string): string => {
+  if (!providerId) return 'the AI service'; // Generic fallback
+  switch (providerId.toLowerCase()) {
+    case 'openai': return 'OpenAI';
+    case 'anthropic': return 'Anthropic';
+    case 'mistral': return 'Mistral AI';
+    case 'simulated': return 'Simulated Provider';
+    // Add more user-friendly names as needed
+    default: return providerId.charAt(0).toUpperCase() + providerId.slice(1); // Capitalize first letter
+  }
+};
 
 const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry }) => {
   const getErrorTitle = () => {
@@ -23,13 +33,24 @@ const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry }) => {
     }
   };
 
+  const providerFromErrorData = error.data?.provider as string | undefined;
+  let displayMessage = error.message;
+
+  if (error.type === 'auth' && providerFromErrorData) {
+    displayMessage = `API key for ${getProviderName(providerFromErrorData)} is not set or is invalid. Please add/check your API key in settings.`;
+  } else if (error.type === 'auth' && error.message.includes('API key for')) {
+    // Fallback if provider not in data but message implies it
+    displayMessage = error.message; // Use the message as is, it might contain the provider
+  }
+
+
   return (
     <div className="flex flex-col p-4 my-4 bg-destructive/10 border border-destructive/30 rounded-md">
       <div className="flex items-center gap-2 text-destructive">
         <AlertCircle className="h-5 w-5 flex-shrink-0" />
         <h3 className="font-semibold text-base">{getErrorTitle()}</h3>
       </div>
-      <p className="mt-2 text-sm text-destructive/90">{error.message}</p>
+      <p className="mt-2 text-sm text-destructive/90">{displayMessage}</p>
       {onRetry && (
         <Button 
           onClick={onRetry}
@@ -46,3 +67,4 @@ const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry }) => {
 };
 
 export default ErrorDisplay;
+

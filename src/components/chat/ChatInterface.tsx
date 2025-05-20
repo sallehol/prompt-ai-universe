@@ -8,16 +8,14 @@ import { useChatToasts } from '@/hooks/useChatToasts';
 import { Message } from '@/types/chat';
 import { logger } from '@/utils/logger';
 import ErrorDisplay from './ErrorDisplay';
+import { ApiError } from '@/api/clients/base.client'; // Import ApiError
 
 interface ChatInterfaceProps {
   messages: Message[];
   currentModel: string;
   isAiTyping: boolean;
   isError: boolean;
-  errorDetails?: {
-    type: 'network' | 'auth' | 'request' | 'rate_limit' | 'server' | 'unknown';
-    message: string;
-  };
+  errorDetails?: ApiError | null; // Updated to use ApiError type
   onSendMessage: (text: string) => void;
   onSelectModel: (model: string) => void;
   onRegenerateResponse: (messageId: string) => void;
@@ -30,7 +28,7 @@ const ChatInterface = ({
   currentModel,
   isAiTyping,
   isError,
-  errorDetails,
+  errorDetails, // This is now ApiError | null
   onSendMessage,
   onSelectModel,
   onRegenerateResponse,
@@ -116,10 +114,10 @@ const ChatInterface = ({
               />
             ))}
             {isAiTyping && !isError && <TypingIndicator modelName={currentModel} />}
-            {isError && errorDetails && (
+            {isError && errorDetails && ( // errorDetails is now ApiError | null
               <div className="max-w-3xl mx-auto w-full px-4 md:px-0">
                 <ErrorDisplay 
-                  error={errorDetails} 
+                  error={errorDetails} // Pass the full ApiError object
                   onRetry={onRetryLastMessage} 
                 />
               </div>
