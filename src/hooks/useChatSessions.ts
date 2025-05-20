@@ -41,17 +41,6 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
   const activeSession = persistedSessions.find(session => session.id === activeSessionId) || null;
   const sortedSessions = [...persistedSessions].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 
-  // Commented-out useEffect with console.log has been removed as part of cleanup.
-  // If it were active, it would be:
-  // useEffect(() => {
-  //   if (activeSession) {
-  //     logger.log(`[useChatSessions] Orchestrator: Active session ID: ${activeSession.id}, Model: ${activeSession.modelUsed}, Messages: ${activeSession.messages.length}`);
-  //   } else if (!isLoadingSessions) {
-  //     logger.log(`[useChatSessions] Orchestrator: No active session.`);
-  //   }
-  // }, [activeSession, isLoadingSessions]);
-
-
   return {
     // Session State
     sessions: sortedSessions,
@@ -59,8 +48,10 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
     activeSessionId,
     isLoadingSessions,
 
-    // AI State
+    // AI State from useMessageManager
     isAiTyping: messageManagerActions.isAiTyping,
+    isError: messageManagerActions.isError, // Pass through
+    errorDetails: messageManagerActions.errorDetails, // Pass through
 
     // Session Lifecycle Actions from useSessionMutations & useActiveSessionManager
     createSession: sessionMutationActions.createSession,
@@ -74,5 +65,6 @@ export const useChatSessions = (initialModel: string = 'gpt-4o-mini') => {
     handleSendMessage: messageManagerActions.handleSendMessage,
     regenerateResponse: messageManagerActions.regenerateResponse,
     toggleSaveMessage: messageManagerActions.toggleSaveMessage,
+    retryLastMessage: messageManagerActions.retryLastMessage, // Pass through
   };
 };

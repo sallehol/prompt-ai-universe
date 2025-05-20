@@ -22,6 +22,8 @@ const ChatPage = () => {
     activeSession,
     activeSessionId,
     isAiTyping,
+    isError, // New from useChatSessions
+    errorDetails, // New from useChatSessions
     createSession,
     switchSession,
     renameSession,
@@ -31,10 +33,11 @@ const ChatPage = () => {
     handleSendMessage,
     regenerateResponse,
     toggleSaveMessage,
+    retryLastMessage, // New from useChatSessions
     isLoadingSessions,
   } = useChatSessions(initialModelForHook);
 
-  logger.log(`[ChatPage] Rendering. isLoadingSessions: ${isLoadingSessions}, activeSessionId: ${activeSessionId}, activeSession model: ${activeSession?.modelUsed}`);
+  logger.log(`[ChatPage] Rendering. isLoadingSessions: ${isLoadingSessions}, activeSessionId: ${activeSessionId}, activeSession model: ${activeSession?.modelUsed}, isError: ${isError}`);
   
   if (!isValidModelId && attemptedModelId) {
     return <InvalidModelError modelId={attemptedModelId} />;
@@ -45,13 +48,14 @@ const ChatPage = () => {
   }
 
   return (
-    // Updated height calculation and added flex flex-col
     <div className="h-[calc(100vh-var(--navbar-height)-var(--footer-height))] overflow-hidden flex flex-col">
       <ChatLayout
         sessions={sessions}
         activeSession={activeSession}
         activeSessionId={activeSessionId}
         isAiTyping={isAiTyping}
+        isError={isError} // Pass down
+        errorDetails={errorDetails} // Pass down
         createSession={createSession}
         switchSession={switchSession}
         renameSession={renameSession}
@@ -62,6 +66,7 @@ const ChatPage = () => {
         regenerateResponse={regenerateResponse}
         toggleSaveMessage={toggleSaveMessage}
         onClearSearchParams={clearModelSearchParam}
+        onRetryLastMessage={retryLastMessage} // Pass down
       />
     </div>
   );

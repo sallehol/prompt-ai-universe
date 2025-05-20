@@ -1,20 +1,22 @@
-
 import React from 'react';
 import SessionList from '@/components/chat/SessionList';
 import ChatInterface from '@/components/chat/ChatInterface';
 import EmptyState from '@/components/chat/EmptyState';
 import { Session } from '@/types/chat';
 import { getModelById } from '@/data/aiModels';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { logger } from '@/utils/logger';
+import { ApiError } from '@/api/clients/base.client';
 
 interface ChatLayoutProps {
   sessions: Session[];
   activeSession: Session | null;
   activeSessionId: string | null;
   isAiTyping: boolean;
+  isError: boolean;
+  errorDetails?: ApiError | null;
   createSession: () => string;
   switchSession: (id: string) => void;
   renameSession: (id: string, name: string) => void;
@@ -25,6 +27,7 @@ interface ChatLayoutProps {
   regenerateResponse: (messageId: string) => void;
   toggleSaveMessage: (messageId: string) => void;
   onClearSearchParams: () => void;
+  onRetryLastMessage?: () => void;
 }
 
 const ChatLayout: React.FC<ChatLayoutProps> = ({
@@ -32,6 +35,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
   activeSession,
   activeSessionId,
   isAiTyping,
+  isError,
+  errorDetails,
   createSession,
   switchSession,
   renameSession,
@@ -41,14 +46,13 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
   handleSendMessage,
   regenerateResponse,
   toggleSaveMessage,
-  onClearSearchParams
+  onClearSearchParams,
+  onRetryLastMessage
 }) => {
   const selectedModelForActiveSession = activeSession?.modelUsed || 'gpt-4o-mini';
 
   return (
-    // Added flex-1 to ensure this layout takes up available space from ChatPage
     <div className="flex h-full w-full overflow-hidden flex-1" style={{ minHeight: '100%' }}>
-      {/* Sidebar with session list - now h-full and flex flex-col, updated border */}
       <div className="w-[286px] h-full flex-shrink-0 bg-card border-r border-border/40 overflow-hidden flex flex-col" style={{ minHeight: '100%' }}>
         <SessionList
           sessions={sessions}
@@ -65,7 +69,6 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
         />
       </div>
       
-      {/* Main chat area */}
       <div className="flex-1 h-full flex flex-col overflow-hidden bg-deep-bg" style={{ minHeight: '100%' }}>
         {activeSession ? (
           <ChatInterface
@@ -73,6 +76,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
             messages={activeSession.messages}
             currentModel={selectedModelForActiveSession}
             isAiTyping={isAiTyping}
+            isError={isError}
+            errorDetails={errorDetails ? { type: errorDetails.type, message: errorDetails.message } : undefined}
             onSendMessage={handleSendMessage}
             onSelectModel={(modelId) => {
               if (activeSessionId) {
@@ -91,6 +96,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
             }}
             onRegenerateResponse={regenerateResponse}
             onToggleSaveMessage={toggleSaveMessage}
+            onRetryLastMessage={onRetryLastMessage}
           />
         ) : (
           <EmptyState
