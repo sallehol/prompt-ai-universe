@@ -180,7 +180,7 @@ const SessionList: React.FC<SessionListProps> = ({
         {renderSessionGroup('Today', sessionGroups.today)}
         {renderSessionGroup('Yesterday', sessionGroups.yesterday)}
         {renderSessionGroup('Previous 7 Days', sessionGroups.previous7Days)}
-        {renderSessionGrop('Older', sessionGroups.older)}
+        {renderSessionGroup('Older', sessionGroups.older)} {/* Corrected typo here */}
         {sessions.length === 0 && (
             <p className="px-3 py-2 text-sm text-muted-foreground">No chats yet. Start a new one!</p>
         )}
@@ -203,3 +203,4 @@ const SessionList: React.FC<SessionListProps> = ({
 };
 
 export default SessionList;
+
