@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Session } from '@/types/chat'; // Message type for session.messages
 import { Button } from '@/components/ui/button';
@@ -180,14 +179,14 @@ const SessionList: React.FC<SessionListProps> = ({
         {renderSessionGroup('Today', sessionGroups.today)}
         {renderSessionGroup('Yesterday', sessionGroups.yesterday)}
         {renderSessionGroup('Previous 7 Days', sessionGroups.previous7Days)}
-        {renderSessionGroup('Older', sessionGroups.older)} {/* Corrected typo here */}
+        {renderSessionGroup('Older', sessionGroups.older)}
         {sessions.length === 0 && (
             <p className="px-3 py-2 text-sm text-muted-foreground">No chats yet. Start a new one!</p>
         )}
       </ScrollArea>
       
-      {/* Fixed footer with Clear Current Chat button - updated top border and padding */}
-      <div className="p-4 pt-2 border-t border-border/40 flex-shrink-0">
+      {/* Fixed footer with Clear Current Chat button - updated top border */}
+      <div className="p-3 border-t border-border/40 flex-shrink-0">
         <Button
           onClick={() => activeSessionId && onClearCurrentChat(activeSessionId)}
           variant="ghost"
@@ -203,4 +202,3 @@ const SessionList: React.FC<SessionListProps> = ({
 };
 
 export default SessionList;
-
