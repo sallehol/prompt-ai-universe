@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import ChatMessage from './ChatMessage';
 import ModelSelector from './ModelSelector';
@@ -82,9 +83,9 @@ const ChatInterface = ({
   };
 
   // Header height target: 65px.
-  // Input area height (p-4 + input + border): approx 73px (16+40+16+1).
-  // New combinedFixedElementsHeight = 65px + 73px = 138px.
-  const combinedFixedElementsHeight = "138px";
+  // Input area height: 65px (fixed).
+  // New combinedFixedElementsHeight = header(65px) + input_area(65px) = 130px.
+  const combinedFixedElementsHeight = "130px";
 
   return (
     <div className="flex flex-col h-full w-full bg-deep-bg text-light-text chat-container">
@@ -127,8 +128,8 @@ const ChatInterface = ({
       </div>
 
       {/* Fixed input area with precise border */}
-      <div className="flex-shrink-0 border-t border-border p-4 bg-deep-bg input-area">
-        <div className="max-w-3xl mx-auto flex items-center gap-2">
+      <div className="flex-shrink-0 border-t border-border bg-deep-bg input-area mx-auto w-[497px] h-[65px] px-4 py-3">
+        <div className="w-full flex items-center gap-2">
           <input
             type="text"
             value={inputValue}
@@ -157,3 +158,4 @@ const ChatInterface = ({
 };
 
 export default ChatInterface;
+
