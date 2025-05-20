@@ -3,10 +3,8 @@ import React, { useRef, useEffect, useState } from 'react';
 import ChatMessage from './ChatMessage';
 import ModelSelector from './ModelSelector';
 import TypingIndicator from './TypingIndicator';
-// Removed ScrollArea and useChatScroll
-// Removed MessageInput
 import { Button } from '@/components/ui/button';
-import { ChevronDown, Send } from 'lucide-react'; // Added Send icon
+import { Send } from 'lucide-react';
 import { useChatToasts } from '@/hooks/useChatToasts';
 import { Message } from '@/types/chat';
 
@@ -47,7 +45,7 @@ const ChatInterface = ({
     }
   };
   
-  // Scroll to bottom when messages change or AI is typing (simplified from user snippet)
+  // Scroll to bottom when messages change or AI is typing
   useEffect(() => {
     // Auto scroll for new messages or when AI starts typing
     if (messages.length > 0 || isAiTyping) {
@@ -91,7 +89,7 @@ const ChatInterface = ({
 
   return (
     <div className="flex flex-col h-full w-full bg-deep-bg text-light-text chat-container">
-      {/* Fixed header */}
+      {/* Fixed header with precise border */}
       <div className="flex-shrink-0 p-4 border-b border-border flex justify-between items-center bg-card">
         <h2 className="text-xl font-semibold text-neon-cyan">AI Chat</h2>
         <ModelSelector selectedModel={currentModel} onSelectModel={onSelectModel} />
@@ -100,13 +98,13 @@ const ChatInterface = ({
       {/* Scrollable messages container - ONLY THIS PART SCROLLS */}
       <div 
         ref={messagesContainerRef}
-        className="py-4 px-4 md:px-6 space-y-4 messages-area" // p-4 was in user snippet, current uses py-4 px-4 md:px-6
+        className="py-4 px-4 md:px-6 space-y-4 messages-area"
         style={{ 
           height: `calc(100% - ${combinedFixedElementsHeight})`,
           overflowY: 'auto',
         }}
       >
-        <div className="max-w-3xl mx-auto w-full"> {/* Ensure messages are constrained horizontally */}
+        <div className="max-w-3xl mx-auto w-full">
             {messages.map((msg) => (
               <ChatMessage
                 key={msg.id}
@@ -129,16 +127,16 @@ const ChatInterface = ({
         </div>
       </div>
 
-      {/* Fixed input area at bottom - ALWAYS VISIBLE */}
+      {/* Fixed input area with precise border */}
       <div className="flex-shrink-0 border-t border-border p-4 bg-deep-bg input-area">
-        <div className="max-w-3xl mx-auto flex items-center gap-2"> {/* Ensure input is constrained horizontally */}
+        <div className="max-w-3xl mx-auto flex items-center gap-2">
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault(); // Prevents newline in input if it were a textarea
+                e.preventDefault();
                 handleSendMessageInternal();
               }
             }}
@@ -160,4 +158,3 @@ const ChatInterface = ({
 };
 
 export default ChatInterface;
-
