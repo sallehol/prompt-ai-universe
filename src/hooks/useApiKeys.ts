@@ -1,32 +1,24 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { logger } from '@/utils/logger';
-
-const API_KEYS_STORAGE_KEY = 'api_keys';
+import { ApiKeyService } from '@/services/ApiKeyService'; // Import the new service
 
 export const useApiKeys = () => {
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    try {
-      const storedKeys = localStorage.getItem(API_KEYS_STORAGE_KEY);
-      if (storedKeys) {
-        setApiKeys(JSON.parse(storedKeys));
-      }
-    } catch (error) {
-      logger.error('Error loading API keys from localStorage:', error);
-    }
+    logger.log('[useApiKeys] Attempting to load API keys from storage.');
+    const loadedKeys = ApiKeyService.loadApiKeysFromStorage();
+    setApiKeys(loadedKeys);
     setIsLoaded(true);
+    logger.log('[useApiKeys] API keys loaded into state.', loadedKeys);
   }, []);
 
   useEffect(() => {
-    if (isLoaded && Object.keys(apiKeys).length >= 0) { // Also save if all keys are removed
-      try {
-        localStorage.setItem(API_KEYS_STORAGE_KEY, JSON.stringify(apiKeys));
-      } catch (error) {
-        logger.error('Error saving API keys to localStorage:', error);
-      }
+    if (isLoaded) {
+      logger.log('[useApiKeys] API keys or loaded status changed, attempting to save to storage.', apiKeys);
+      ApiKeyService.saveApiKeysToStorage(apiKeys);
     }
   }, [apiKeys, isLoaded]);
 
@@ -35,20 +27,18 @@ export const useApiKeys = () => {
   }, [apiKeys]);
 
   const setApiKey = useCallback((provider: string, key: string) => {
-    setApiKeys(prev => ({
-      ...prev,
-      [provider]: key,
-    }));
+    logger.log(`[useApiKeys] Setting API key for provider: ${provider}`);
+    setApiKeys(prev => {
+      const newKeys = { ...prev, [provider]: key };
+      return newKeys;
+    });
   }, []);
 
   const removeApiKey = useCallback((provider: string) => {
+    logger.log(`[useApiKeys] Removing API key for provider: ${provider}`);
     setApiKeys(prev => {
       const newKeys = { ...prev };
       delete newKeys[provider];
-      // If newKeys is empty, ensure localStorage reflects this
-      if (Object.keys(newKeys).length === 0) {
-          localStorage.removeItem(API_KEYS_STORAGE_KEY);
-      }
       return newKeys;
     });
   }, []);
@@ -61,3 +51,4 @@ export const useApiKeys = () => {
     isApiKeysLoaded: isLoaded,
   };
 };
+
