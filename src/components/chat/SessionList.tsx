@@ -15,7 +15,7 @@ interface SessionListProps {
   onSwitchSession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, newName: string) => void;
   onDeleteSession: (sessionId: string) => void;
-  onClearCurrentChat: (sessionId: string) => void; // Added this prop
+  onClearCurrentChat: (sessionId: string) => void;
 }
 
 const SessionList: React.FC<SessionListProps> = ({
@@ -45,7 +45,7 @@ const SessionList: React.FC<SessionListProps> = ({
 
   const handleNewChat = () => {
     const newId = onCreateSession();
-    onSwitchSession(newId); // Automatically switch to the new chat
+    onSwitchSession(newId); 
   };
   
   const handleClearChatClick = () => {
@@ -56,7 +56,6 @@ const SessionList: React.FC<SessionListProps> = ({
 
   return (
     <div className="flex flex-col h-full p-2 bg-card border-r border-border text-sm">
-      {/* More prominent New Chat button */}
       <Button 
         onClick={handleNewChat} 
         className="w-full mb-3 bg-primary hover:bg-primary/90 flex items-center justify-center gap-2"
@@ -65,18 +64,8 @@ const SessionList: React.FC<SessionListProps> = ({
         <Plus size={16} /> New Chat
       </Button>
       
-      {/* Visually distinct Clear Current Chat button */}
-      <Button 
-        onClick={handleClearChatClick} 
-        variant="outline" 
-        className="w-full mb-4 border-dashed hover:bg-accent/50 flex items-center justify-center gap-2"
-        disabled={!activeSessionId || sessions.find(s => s.id === activeSessionId)?.messages.length === 1} // Disable if no active session or only initial message
-      >
-        <Trash2 size={16} /> Clear Current Chat
-      </Button>
-      
-      <p className="text-xs text-muted-foreground mb-1 px-1">Conversations</p>
-      <ScrollArea className="flex-grow">
+      <p className="text-xs text-muted-foreground mt-1 mb-1 px-1">Conversations</p>
+      <ScrollArea className="flex-grow mb-2"> {/* Added mb-2 for spacing before clear button */}
         {sessions.map((session) => (
           <Dialog key={session.id} onOpenChange={(open) => !open && setEditingSessionId(null)}>
             <div
@@ -125,8 +114,19 @@ const SessionList: React.FC<SessionListProps> = ({
           </Dialog>
         ))}
       </ScrollArea>
+
+      {/* Clear Current Chat button at the bottom */}
+      <Button 
+        onClick={handleClearChatClick} 
+        variant="ghost" // Changed variant
+        className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center justify-center gap-2 mt-auto pt-2 pb-2" // mt-auto to push to bottom, added padding
+        disabled={!activeSessionId || (sessions.find(s => s.id === activeSessionId)?.messages.length ?? 0) <= 1}
+      >
+        <Trash2 size={16} /> Clear Current Chat
+      </Button>
     </div>
   );
 };
 
 export default SessionList;
+
