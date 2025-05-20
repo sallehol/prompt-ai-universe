@@ -1,7 +1,6 @@
 
 import React from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+// Removed ReactMarkdown and remarkGfm imports
 import { Message } from './ChatInterface'; // Import the Message type
 import { cn } from '@/lib/utils';
 import { User, Bot } from 'lucide-react'; // Icons for user and AI
@@ -28,17 +27,12 @@ const ChatMessage = ({ message }: { message: Message }) => {
         </p>
         <div
           className={cn(
-            'mt-1 text-sm leading-relaxed prose prose-sm prose-invert max-w-none',
+            'mt-1 text-sm leading-relaxed prose prose-sm prose-invert max-w-none', // Keeping prose styles for now, can be adjusted later
              isUser ? 'text-light-text/90' : 'text-light-text/90'
           )}
         >
-          {isUser ? (
-            message.text
-          ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {message.text}
-            </ReactMarkdown>
-          )}
+          {/* Simplified rendering for both user and AI messages to plain text */}
+          {message.text}
         </div>
         <p className={cn("text-xs mt-1", isUser ? "text-medium-text/70 text-right" : "text-medium-text/70")}>
           {message.timestamp.toLocaleTimeString()}
