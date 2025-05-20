@@ -44,7 +44,9 @@ const ChatPage = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-var(--navbar-height))] overflow-hidden">
+    // Changed from h-[calc(100vh-var(--navbar-height))] to h-full
+    // Added flex flex-col to ensure ChatLayout can correctly fill height
+    <div className="h-full flex flex-col overflow-hidden"> 
       <ChatLayout
         sessions={sessions}
         activeSession={activeSession}
