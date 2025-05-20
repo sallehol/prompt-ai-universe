@@ -109,7 +109,6 @@ const ChatInterface = ({
                   timestamp: new Date(msg.timestamp),
                   isSaved: msg.isSaved,
                   model: msg.role === 'assistant' ? (msg.metadata?.model || currentModel) : undefined,
-                  error: msg.metadata?.error
                 }}
                 onCopyToClipboard={handleCopyToClipboard}
                 onRegenerateResponse={handleInternalRegenerate}
