@@ -20,7 +20,7 @@ interface ChatLayoutProps {
   activeSession: Session | null;
   activeSessionId: string | null;
   isAiTyping: boolean;
-  createSession: () => string;
+  createSession: () => string; // This returns a string
   switchSession: (id: string) => void;
   renameSession: (id: string, name: string) => void;
   deleteSession: (id: string) => void;
@@ -107,7 +107,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
             onToggleSaveMessage={toggleSaveMessage}
           />
         ) : (
-          <EmptyState onCreateSession={createSession} /> // Pass createSession to EmptyState
+          // Adjust EmptyState to match its expected prop type for onCreateSession (void return)
+          <EmptyState onCreateSession={() => { createSession(); }} />
         )}
       </div>
     </div>
