@@ -44,7 +44,7 @@ const ChatPage = () => {
   }
 
   return (
-    <div className="w-[783px] h-[729px] overflow-hidden mx-auto">
+    <div className="h-[calc(100vh-var(--navbar-height))] overflow-hidden">
       <ChatLayout
         sessions={sessions}
         activeSession={activeSession}
@@ -66,4 +66,3 @@ const ChatPage = () => {
 };
 
 export default ChatPage;
-
