@@ -44,22 +44,24 @@ const ChatPage = () => {
   }
 
   return (
-    <ChatLayout
-      sessions={sessions}
-      activeSession={activeSession}
-      activeSessionId={activeSessionId}
-      isAiTyping={isAiTyping}
-      createSession={createSession}
-      switchSession={switchSession}
-      renameSession={renameSession}
-      deleteSession={deleteSession}
-      clearSessionMessages={clearSessionMessages}
-      updateSessionModel={updateSessionModel}
-      handleSendMessage={handleSendMessage}
-      regenerateResponse={regenerateResponse}
-      toggleSaveMessage={toggleSaveMessage}
-      onClearSearchParams={clearModelSearchParam}
-    />
+    <div className="h-[calc(100vh-var(--navbar-height))] overflow-hidden"> {/* Adjusted height and added overflow-hidden */}
+      <ChatLayout
+        sessions={sessions}
+        activeSession={activeSession}
+        activeSessionId={activeSessionId}
+        isAiTyping={isAiTyping}
+        createSession={createSession}
+        switchSession={switchSession}
+        renameSession={renameSession}
+        deleteSession={deleteSession}
+        clearSessionMessages={clearSessionMessages}
+        updateSessionModel={updateSessionModel}
+        handleSendMessage={handleSendMessage}
+        regenerateResponse={regenerateResponse}
+        toggleSaveMessage={toggleSaveMessage}
+        onClearSearchParams={clearModelSearchParam}
+      />
+    </div>
   );
 };
 

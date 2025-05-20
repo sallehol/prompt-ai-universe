@@ -4,9 +4,12 @@ import Navbar from './Navbar';
 
 const Layout = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-deep-bg text-light-text">
+    <div 
+      className="min-h-screen flex flex-col bg-deep-bg text-light-text"
+      style={{ "--navbar-height": "4rem" } as React.CSSProperties}
+    >
       <Navbar />
-      <main className="flex-grow container mx-auto px-6 py-8">
+      <main className="flex-grow container mx-auto px-6 py-8 flex flex-col"> {/* Added flex flex-col for children to use h-full if needed */}
         <Outlet />
       </main>
       <footer className="bg-deep-bg/50 border-t border-border py-6 text-center text-medium-text">
@@ -18,4 +21,3 @@ const Layout = () => {
 };
 
 export default Layout;
-
