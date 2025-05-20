@@ -2,15 +2,17 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, RefreshCw } from 'lucide-react';
-import { ApiError } from '@/api/clients/base.client'; // Import ApiError
+import { ApiError } from '@/api/clients/base.client';
 
 interface ErrorDisplayProps {
-  error: ApiError; // Updated to use ApiError type
+  error: ApiError;
   onRetry?: () => void;
 }
 
+// Enhanced getProviderName function that handles more edge cases
 const getProviderName = (providerId: string): string => {
   if (!providerId) return 'the AI service'; // Generic fallback
+  
   switch (providerId.toLowerCase()) {
     case 'openai': return 'OpenAI';
     case 'anthropic': return 'Anthropic';
@@ -33,6 +35,7 @@ const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry }) => {
     }
   };
 
+  // Extract provider information from error data or error message
   const providerFromErrorData = error.data?.provider as string | undefined;
   let displayMessage = error.message;
 
@@ -42,7 +45,6 @@ const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry }) => {
     // Fallback if provider not in data but message implies it
     displayMessage = error.message; // Use the message as is, it might contain the provider
   }
-
 
   return (
     <div className="flex flex-col p-4 my-4 bg-destructive/10 border border-destructive/30 rounded-md">
@@ -67,4 +69,3 @@ const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry }) => {
 };
 
 export default ErrorDisplay;
-
