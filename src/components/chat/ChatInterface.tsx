@@ -75,8 +75,8 @@ const ChatInterface = ({
 
       {/* Message area with scroll */}
       <ScrollArea className="flex-grow p-4 md:p-6 overflow-y-auto" ref={scrollAreaRef}>
-        {/* Added pb-24 (padding-bottom: 6rem) to ensure last message is not hidden by the input area */}
-        <div ref={viewportRef} className="space-y-4 max-w-3xl mx-auto pb-24">
+        {/* Increased bottom padding to 32 (8rem) to ensure last message is not hidden by the input area */}
+        <div ref={viewportRef} className="space-y-4 max-w-3xl mx-auto pb-32">
           {messages.map((msg) => (
             <ChatMessage
               key={msg.id}
@@ -95,7 +95,7 @@ const ChatInterface = ({
         <Button
           variant="outline"
           size="icon"
-          className="absolute bottom-24 right-6 md:right-8 bg-card/80 hover:bg-card border-border text-light-text rounded-full z-10 animate-fade-in" // Adjusted bottom position due to padding
+          className="absolute bottom-28 md:bottom-28 right-6 md:right-8 bg-card/80 hover:bg-card border-border text-light-text rounded-full z-10 animate-fade-in" // Adjusted bottom position for better placement above input
           onClick={() => scrollToBottom('smooth')}
           aria-label="Scroll to bottom"
         >
@@ -103,14 +103,14 @@ const ChatInterface = ({
         </Button>
       )}
 
-      {/* Message input area - ensuring this is always visible */}
-      {/* This div structure with flex-shrink-0 and mt-auto in a flex-col parent should stick it to the bottom */}
-      <div className="max-w-3xl mx-auto w-full px-4 md:px-6 flex-shrink-0 mt-auto pb-4">
-        <MessageInput onSendMessage={onSendMessage} />
+      {/* Message input area - Using fixed positioning to ensure it's always visible */}
+      <div className="w-full fixed bottom-0 left-0 right-0 bg-deep-bg border-t border-border z-20 py-4 px-4 md:px-6">
+        <div className="max-w-3xl mx-auto">
+          <MessageInput onSendMessage={onSendMessage} />
+        </div>
       </div>
     </div>
   );
 };
 
 export default ChatInterface;
-

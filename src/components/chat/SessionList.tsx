@@ -56,24 +56,32 @@ const SessionList: React.FC<SessionListProps> = ({
 
   return (
     <div className="flex flex-col h-full p-2 bg-card border-r border-border text-sm">
-      <Button onClick={handleNewChat} className="w-full mb-3">
-        <Plus size={16} className="mr-2" /> New Chat
+      {/* More prominent New Chat button */}
+      <Button 
+        onClick={handleNewChat} 
+        className="w-full mb-3 bg-primary hover:bg-primary/90 flex items-center justify-center gap-2"
+        variant="default"
+      >
+        <Plus size={16} /> New Chat
       </Button>
+      
+      {/* Visually distinct Clear Current Chat button */}
       <Button 
         onClick={handleClearChatClick} 
         variant="outline" 
-        className="w-full mb-3"
+        className="w-full mb-4 border-dashed hover:bg-accent/50 flex items-center justify-center gap-2"
         disabled={!activeSessionId || sessions.find(s => s.id === activeSessionId)?.messages.length === 1} // Disable if no active session or only initial message
       >
-        <Trash2 size={16} className="mr-2" /> Clear Current Chat
+        <Trash2 size={16} /> Clear Current Chat
       </Button>
+      
       <p className="text-xs text-muted-foreground mb-1 px-1">Conversations</p>
       <ScrollArea className="flex-grow">
         {sessions.map((session) => (
           <Dialog key={session.id} onOpenChange={(open) => !open && setEditingSessionId(null)}>
             <div
               className={cn(
-                'flex items-center justify-between p-2 rounded-md hover:bg-accent cursor-pointer group',
+                'flex items-center justify-between p-2 rounded-md hover:bg-accent cursor-pointer group mb-1',
                 session.id === activeSessionId && 'bg-accent text-accent-foreground'
               )}
               onClick={() => onSwitchSession(session.id)}
