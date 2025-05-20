@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
-import { Session } from '@/types/chat';
-import { createInitialSession, createNewMessage } from '@/lib/chatUtils'; // createNewMessage needed for clearSessionMessages
+import { Session, Message } from '@/types/chat'; // Message is needed by Session
+import { createNewMessage } from '@/lib/chatUtils'; // For clearSessionMessages
 
 type UpdateSessionsFn = (updater: (prevSessions: Session[]) => Session[]) => void;
 
@@ -9,7 +9,7 @@ interface UseSessionMutationsProps {
   initialModel: string;
   activeSessionId: string | null;
   setActiveSessionId: (id: string | null) => void;
-  persistedSessions: Session[]; // Needed for deleteSession logic
+  persistedSessions: Session[];
 }
 
 export const useSessionMutations = ({
@@ -17,19 +17,33 @@ export const useSessionMutations = ({
   initialModel,
   activeSessionId,
   setActiveSessionId,
-  persistedSessions,
+  persistedSessions, // Keep if used by other mutations
 }: UseSessionMutationsProps) => {
   const createSession = useCallback(() => {
-    const modelForNewSession = activeSessionId
-      ? persistedSessions.find(s => s.id === activeSessionId)?.modelUsed || initialModel
-      : initialModel;
-    const newSession = createInitialSession(modelForNewSession);
-    console.log(`[useSessionMutations] createSession: new session ${newSession.id} with model ${modelForNewSession}`);
+    const newSessionId = Date.now().toString(); // Unique ID
+    const now = new Date();
+    // Default name with timestamp HH:MM
+    const defaultName = `New Chat ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}`;
     
-    updateAndPersistSessions(prev => [...prev, newSession]);
-    setActiveSessionId(newSession.id);
-    return newSession.id;
-  }, [initialModel, activeSessionId, persistedSessions, updateAndPersistSessions, setActiveSessionId]);
+    const newSession: Session = {
+      id: newSessionId,
+      name: defaultName,
+      modelUsed: persistedSessions.find(s => s.id === activeSessionId)?.modelUsed || initialModel,
+      messages: [], // Start with no messages. An initial greeting can be added by system/AI later if needed.
+      createdAt: now.getTime(),
+      lastActivityAt: now.getTime(),
+    };
+    
+    updateAndPersistSessions(prevSessions => {
+      const updatedSessions = [...prevSessions, newSession];
+      console.log('Created new session:', newSession);
+      console.log('Updated sessions:', updatedSessions);
+      return updatedSessions;
+    });
+    
+    setActiveSessionId(newSessionId);
+    return newSessionId;
+  }, [initialModel, updateAndPersistSessions, setActiveSessionId, persistedSessions, activeSessionId]);
 
   const renameSession = useCallback((sessionId: string, newName: string) => {
     console.log(`[useSessionMutations] renameSession: ${sessionId} to "${newName}"`);
@@ -50,13 +64,24 @@ export const useSessionMutations = ({
           setActiveSessionId(sortedRemaining[0].id);
           console.log(`[useSessionMutations] deleteSession: active session deleted, switched to ${sortedRemaining[0].id}`);
         } else {
-          const newSession = createInitialSession(initialModel);
-          setActiveSessionId(newSession.id);
-          console.log(`[useSessionMutations] deleteSession: last session deleted, created new ${newSession.id}`);
-          return [newSession];
+          // No sessions left, create a new one
+          const newSessionId = Date.now().toString();
+          const now = new Date();
+          const defaultName = `New Chat ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+          const newFallbackSession: Session = {
+            id: newSessionId,
+            name: defaultName,
+            modelUsed: initialModel,
+            messages: [],
+            createdAt: now.getTime(),
+            lastActivityAt: now.getTime(),
+          };
+          setActiveSessionId(newFallbackSession.id);
+          console.log(`[useSessionMutations] deleteSession: last session deleted, created new ${newFallbackSession.id}`);
+          return [newFallbackSession];
         }
       }
-      return remainingSessions;
+      return remainingSessions.length > 0 ? remainingSessions : []; // Ensure it doesn't return empty if nothing to return for default
     });
   }, [activeSessionId, initialModel, updateAndPersistSessions, setActiveSessionId]);
 
@@ -66,11 +91,24 @@ export const useSessionMutations = ({
       prev.map(session => {
         if (session.id === sessionId) {
           const currentModel = session.modelUsed;
+          // createNewMessage will need to be updated to use role/content for Message type
+          // For now, assuming it still works or will be fixed.
+          // If it needs to be an empty array: messages: [],
+          const initialMessage: Message = {
+            id: Date.now().toString() + '_ai',
+            role: 'assistant',
+            content: 'Hello! How can I help you today?',
+            timestamp: Date.now(),
+          };
           return {
             ...session,
-            messages: [createNewMessage('Hello! How can I help you today?', 'ai', currentModel)],
+            messages: [initialMessage],
             lastActivityAt: Date.now(),
-            name: session.name === "New Chat" || session.messages.length <= 1 ? "New Chat" : session.name
+            // Reset name if it's "New Chat" or was very short (likely an empty chat that got named)
+            // or if messages.length <= 1 (meaning it was just the initial greeting)
+            name: session.name.startsWith("New Chat") || session.messages.length <= 1 
+                  ? `Chat ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}` 
+                  : session.name,
           };
         }
         return session;
@@ -108,14 +146,7 @@ export const useSessionMutations = ({
 
   return {
     createSession,
-    renameSession: useCallback((sessionId: string, newName: string) => {
-      console.log(`[useSessionMutations] renameSession: ${sessionId} to "${newName}"`);
-      updateAndPersistSessions(prev =>
-        prev.map(session =>
-          session.id === sessionId ? { ...session, name: newName, lastActivityAt: Date.now() } : session
-        )
-      );
-    }, [updateAndPersistSessions]),
+    renameSession, // Already correct
     deleteSession,
     clearSessionMessages,
     updateSessionModel,

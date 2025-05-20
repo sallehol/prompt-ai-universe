@@ -44,52 +44,82 @@ const SessionList: React.FC<SessionListProps> = ({
   };
 
   const handleNewChat = () => {
+    console.log('Creating new chat...');
+    console.log('Before creating new chat - Current sessions:', sessions);
     const newId = onCreateSession();
-    onSwitchSession(newId); 
+    console.log('New chat created with ID:', newId);
+    // The sessions prop might not update immediately here due to state batching.
+    // To see updated sessions, log inside a useEffect that depends on `sessions` in the parent component,
+    // or rely on the logs within `useSessionMutations` and `useSessionPersistence`.
+    console.log('Switching to new chat...');
+    onSwitchSession(newId);
   };
-  
+
   const handleClearChatClick = () => {
     if (activeSessionId) {
         onClearCurrentChat(activeSessionId);
     }
   };
 
+  const isClearChatDisabled = () => {
+    if (!activeSessionId) return true;
+    const activeSession = sessions.find(s => s.id === activeSessionId);
+    return !activeSession || (activeSession.messages.length <= 1);
+  };
+
   return (
     <div className="flex flex-col h-full p-2 bg-card border-r border-border text-sm">
-      <Button 
-        onClick={handleNewChat} 
-        className="w-full mb-3 bg-primary hover:bg-primary/90 flex items-center justify-center gap-2"
+      <Button
+        onClick={handleNewChat}
+        className="w-full mb-3 bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center gap-2"
         variant="default"
       >
-        <Plus size={16} /> New Chat
+        <Plus size={18} className="stroke-[2.5px]" /> New Chat
       </Button>
-      
+
       <p className="text-xs text-muted-foreground mt-1 mb-1 px-1">Conversations</p>
-      <ScrollArea className="flex-grow mb-2"> {/* Added mb-2 for spacing before clear button */}
+      <ScrollArea className="flex-grow mb-2">
         {sessions.map((session) => (
           <Dialog key={session.id} onOpenChange={(open) => !open && setEditingSessionId(null)}>
             <div
               className={cn(
-                'flex items-center justify-between p-2 rounded-md hover:bg-accent cursor-pointer group mb-1',
+                'flex flex-col p-2 rounded-md hover:bg-accent cursor-pointer group mb-1.5', // slightly increased mb
                 session.id === activeSessionId && 'bg-accent text-accent-foreground'
               )}
               onClick={() => onSwitchSession(session.id)}
             >
-              <div className="flex items-center truncate">
-                <MessageSquareText size={16} className="mr-2 flex-shrink-0" />
-                <span className="truncate" title={session.name}>{session.name}</span>
-              </div>
-              <div className="flex-shrink-0 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleStartEdit(session); }}>
-                    <Edit3 size={14} />
+              {/* Session header with title and actions */}
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center truncate">
+                  <MessageSquareText size={15} className="mr-2 flex-shrink-0" />
+                  <span className={cn("truncate font-medium", session.id === activeSessionId && "text-accent-foreground")} title={session.name}>
+                    {session.name}
+                  </span>
+                </div>
+                <div className="flex-shrink-0 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleStartEdit(session); }}>
+                      <Edit3 size={13} />
+                    </Button>
+                  </DialogTrigger>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }}>
+                    <Trash2 size={13} />
                   </Button>
-                </DialogTrigger>
-                <Button variant="ghost" size="icon" className="hover:bg-destructive/20 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }}>
-                  <Trash2 size={14} />
-                </Button>
+                </div>
+              </div>
+              
+              {/* Preview of last message */}
+              <div className={cn("text-xs text-muted-foreground mt-1 truncate pl-[23px]", session.id === activeSessionId && "text-accent-foreground/80")}> {/* Align with text after icon */}
+                {session.messages.length > 0 
+                  ? (session.messages[session.messages.length - 1].content || "Empty message").substring(0, 35) + ((session.messages[session.messages.length - 1].content || "").length > 35 ? '...' : '')
+                  : 'No messages yet'}
+              </div>
+              {/* Timestamp */}
+              <div className={cn("text-xs text-muted-foreground mt-0.5 pl-[23px]", session.id === activeSessionId && "text-accent-foreground/70")}> {/* Align with text after icon */}
+                {new Date(session.lastActivityAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}
               </div>
             </div>
+            
             {editingSessionId === session.id && (
               <DialogContent>
                 <DialogHeader>
@@ -115,12 +145,12 @@ const SessionList: React.FC<SessionListProps> = ({
         ))}
       </ScrollArea>
 
-      {/* Clear Current Chat button at the bottom */}
-      <Button 
-        onClick={handleClearChatClick} 
-        variant="ghost" // Changed variant
-        className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center justify-center gap-2 mt-auto pt-2 pb-2" // mt-auto to push to bottom, added padding
-        disabled={!activeSessionId || (sessions.find(s => s.id === activeSessionId)?.messages.length ?? 0) <= 1}
+      <Button
+        onClick={handleClearChatClick}
+        variant="ghost"
+        className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center justify-center gap-2 mt-auto pt-2 pb-2 border-t border-border"
+        disabled={isClearChatDisabled()}
+        title={isClearChatDisabled() ? "Clear chat (disabled for new or empty chats)" : "Clear all messages in the current chat"}
       >
         <Trash2 size={16} /> Clear Current Chat
       </Button>
@@ -129,4 +159,3 @@ const SessionList: React.FC<SessionListProps> = ({
 };
 
 export default SessionList;
-
