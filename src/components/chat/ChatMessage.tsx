@@ -1,9 +1,8 @@
 
 import React from 'react';
-// Removed ReactMarkdown and remarkGfm imports
-import { Message } from './ChatInterface'; // Import the Message type
+import { Message } from './ChatInterface';
 import { cn } from '@/lib/utils';
-import { User, Bot } from 'lucide-react'; // Icons for user and AI
+import { User, Bot, Cpu } from 'lucide-react'; // Added Cpu icon
 
 const ChatMessage = ({ message }: { message: Message }) => {
   const isUser = message.sender === 'user';
@@ -21,17 +20,24 @@ const ChatMessage = ({ message }: { message: Message }) => {
       )}>
         {isUser ? <User size={20} /> : <Bot size={20} />}
       </div>
-      <div className="flex flex-col min-w-0"> {/* Added min-w-0 to prevent overflow issues with long markdown content */}
-        <p className={cn('text-sm font-medium', isUser ? 'text-light-text text-right' : 'text-light-text')}>
-          {isUser ? 'You' : 'AI Model'}
-        </p>
+      <div className="flex flex-col min-w-0">
+        <div className={cn("flex items-center", isUser ? "justify-end" : "justify-start")}>
+          <p className={cn('text-sm font-medium', isUser ? 'text-light-text' : 'text-light-text')}>
+            {isUser ? 'You' : 'AI Model'}
+          </p>
+          {!isUser && message.model && (
+            <div className="flex items-center text-xs text-medium-text/70 ml-2" title={`Model: ${message.model}`}>
+              <Cpu size={12} className="mr-1" />
+              <span>{message.model.replace('gpt-4o-mini', '4o Mini').replace('gpt-4o', '4o')}</span>
+            </div>
+          )}
+        </div>
         <div
           className={cn(
-            'mt-1 text-sm leading-relaxed prose prose-sm prose-invert max-w-none', // Keeping prose styles for now, can be adjusted later
+            'mt-1 text-sm leading-relaxed prose prose-sm prose-invert max-w-none',
              isUser ? 'text-light-text/90' : 'text-light-text/90'
           )}
         >
-          {/* Simplified rendering for both user and AI messages to plain text */}
           {message.text}
         </div>
         <p className={cn("text-xs mt-1", isUser ? "text-medium-text/70 text-right" : "text-medium-text/70")}>
