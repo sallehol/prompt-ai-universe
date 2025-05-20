@@ -1,6 +1,5 @@
-
 import { useState, useCallback } from 'react';
-import { Session } from '@/types/chat';
+import { Session, Message } from '@/types/chat'; // Ensured Message is from @/types/chat
 import { createNewMessage } from '@/lib/chatUtils';
 
 type UpdateSessionsFn = (updater: (prevSessions: Session[]) => Session[]) => void;
@@ -23,13 +22,16 @@ export const useMessageManager = ({
       const now = Date.now();
       return prevSessions.map(session => {
         if (session.id === sessionId) {
-          const modelForMessage = modelOverride || session.modelUsed;
-          const newMessage = createNewMessage(text, sender, modelForMessage);
+          const modelForMessage = modelOverride || session.modelUsed; // Used for context/logging
+          const messageRole = sender === 'user' ? 'user' : 'assistant'; // Map sender to role
+          // Call createNewMessage with content and role. modelForMessage is not part of Message object.
+          const newMessage = createNewMessage(text, messageRole); 
           
-          console.log(`[useMessageManager] addMessageToSession: for session ${session.id}, text: "${text.substring(0,30)}...", sender: ${sender}, modelForMessage: ${modelForMessage}`);
+          console.log(`[useMessageManager] addMessageToSession: for session ${session.id}, content: "${text.substring(0,30)}...", role: ${messageRole}, modelForMessageContext: ${modelForMessage}`);
           
           let newName = session.name;
-          if (sender === 'user' && (session.name === 'New Chat' || session.messages.length <= 1) && session.messages.filter(m => m.sender === 'user').length === 0) {
+          // Use role for filtering
+          if (sender === 'user' && (session.name === 'New Chat' || session.messages.length <= 1) && session.messages.filter(m => m.role === 'user').length === 0) {
             newName = text.substring(0, 30) + (text.length > 30 ? '...' : '');
           }
 
@@ -38,7 +40,6 @@ export const useMessageManager = ({
             messages: [...session.messages, newMessage],
             lastActivityAt: now,
             name: newName,
-            // modelUsed is NOT changed here, only message's model is set
           };
         }
         return session;
@@ -58,11 +59,13 @@ export const useMessageManager = ({
     const modelForResponse = currentSession.modelUsed;
     console.log(`[useMessageManager] handleSendMessage: activeSessionId=${activeSessionId}, text: "${text.substring(0,30)}...", model: ${modelForResponse}`);
 
-    addMessageToSessionInternal(activeSessionId, text, 'user', modelForResponse);
+    // 'user' is passed as sender, addMessageToSessionInternal will map it to role
+    addMessageToSessionInternal(activeSessionId, text, 'user'); // modelForResponse is implicitly used by session context
     setIsAiTyping(true);
 
     setTimeout(() => {
       const aiResponseText = `Simulated response from ${modelForResponse} to: "${text}"`;
+      // 'ai' is passed as sender, addMessageToSessionInternal will map it to role
       addMessageToSessionInternal(activeSessionId, aiResponseText, 'ai', modelForResponse);
       setIsAiTyping(false);
       console.log(`[useMessageManager] handleSendMessage: AI response sent using model ${modelForResponse}`);
@@ -79,18 +82,21 @@ export const useMessageManager = ({
     }
     
     const messageIndex = currentSession.messages.findIndex(msg => msg.id === messageIdToRegenerate);
-    if (messageIndex === -1 || currentSession.messages[messageIndex].sender !== 'ai') {
-      console.warn(`[useMessageManager] regenerateResponse: AI message ${messageIdToRegenerate} not found or not AI.`);
+    // Check role for AI message
+    if (messageIndex === -1 || currentSession.messages[messageIndex].role !== 'assistant') {
+      console.warn(`[useMessageManager] regenerateResponse: AI message ${messageIdToRegenerate} not found or not AI (role: ${currentSession.messages[messageIndex]?.role}).`);
       return;
     }
 
     const userPromptMessageIndex = messageIndex - 1;
-    if (userPromptMessageIndex < 0 || currentSession.messages[userPromptMessageIndex].sender !== 'user') {
-      console.warn(`[useMessageManager] regenerateResponse: User prompt for ${messageIdToRegenerate} not found.`);
+    // Check role for user message
+    if (userPromptMessageIndex < 0 || currentSession.messages[userPromptMessageIndex].role !== 'user') {
+      console.warn(`[useMessageManager] regenerateResponse: User prompt for ${messageIdToRegenerate} not found (index: ${userPromptMessageIndex}, role: ${currentSession.messages[userPromptMessageIndex]?.role}).`);
       return;
     }
     
-    const userPrompt = currentSession.messages[userPromptMessageIndex].text;
+    // Use content for text
+    const userPrompt = currentSession.messages[userPromptMessageIndex].content;
     const modelForRegeneration = currentSession.modelUsed; 
     console.log(`[useMessageManager] regenerateResponse: For prompt "${userPrompt.substring(0,30)}..." using model ${modelForRegeneration}`);
 
@@ -109,6 +115,7 @@ export const useMessageManager = ({
 
     setTimeout(() => {
       const regeneratedResponseText = `(Regenerated) New response from ${modelForRegeneration} to: "${userPrompt}"`;
+      // 'ai' is passed as sender, addMessageToSessionInternal will map it to role
       addMessageToSessionInternal(activeSessionId, regeneratedResponseText, 'ai', modelForRegeneration);
       setIsAiTyping(false);
       console.log(`[useMessageManager] regenerateResponse: AI response regenerated using model ${modelForRegeneration}`);
@@ -137,4 +144,3 @@ export const useMessageManager = ({
     toggleSaveMessage,
   };
 };
-

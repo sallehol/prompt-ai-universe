@@ -1,26 +1,40 @@
+
 import React from 'react';
-import { Message } from './ChatInterface';
+// Removed erroneous import: import { Message } from './ChatInterface';
 import { cn } from '@/lib/utils';
 import { User, Bot, Cpu, Copy, RefreshCw, Star, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getModelById } from '@/data/aiModels';
 
+// Local interface to define the structure of the 'message' prop AS PASSED BY ChatInterface.tsx
+// This matches the object structure ChatInterface creates.
+interface ChatMessageDisplayData {
+  id: string;
+  text: string; // Corresponds to content after mapping in ChatInterface
+  sender: 'user' | 'ai'; // Corresponds to role after mapping in ChatInterface
+  timestamp: Date; // Corresponds to numeric timestamp after new Date() in ChatInterface
+  isSaved?: boolean;
+  model?: string; // Optional model name, passed by ChatInterface for AI messages
+}
+
 interface ChatMessageProps {
-  message: Message;
+  message: ChatMessageDisplayData; // Use the local interface
   onCopyToClipboard: (text: string) => void;
   onRegenerateResponse: (messageId: string) => void;
   onToggleSaveMessage: (messageId: string) => void;
 }
 
 const ChatMessage = ({ message, onCopyToClipboard, onRegenerateResponse, onToggleSaveMessage }: ChatMessageProps) => {
+  // Internal logic uses 'sender' and 'text' as per ChatMessageDisplayData
   const isUser = message.sender === 'user';
   const [isCopied, setIsCopied] = React.useState(false);
 
+  // Log based on the received props
   console.log(`[ChatMessage] Rendering ID ${message.id}, sender: ${message.sender}, model: ${message.model}, text: "${message.text.substring(0, 20)}..."`);
 
   const handleCopy = () => {
-    onCopyToClipboard(message.text);
+    onCopyToClipboard(message.text); // message.text is correct here due to ChatMessageDisplayData
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -65,10 +79,11 @@ const ChatMessage = ({ message, onCopyToClipboard, onRegenerateResponse, onToggl
                isUser ? 'text-light-text/90' : 'text-light-text/90'
             )}
           >
-            {message.text}
+            {message.text} {/* Use message.text as per ChatMessageDisplayData */}
           </div>
           <div className="flex items-center justify-between mt-1">
               <p className={cn("text-xs", isUser ? "text-medium-text/70 text-right" : "text-medium-text/70")}>
+                  {/* message.timestamp is already a Date object here */}
                   {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
               {!isUser && (
@@ -115,3 +130,4 @@ const ChatMessage = ({ message, onCopyToClipboard, onRegenerateResponse, onToggl
 };
 
 export default ChatMessage;
+
