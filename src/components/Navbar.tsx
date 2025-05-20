@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BotMessageSquare, LayoutGrid, Tags, UserCircle, LogOut, Settings, User } from 'lucide-react';
+import { BotMessageSquare, LayoutGrid, Tags, UserCircle, LogOut, Settings, User, MessageSquare } from 'lucide-react';
 import AuthModal from './AuthModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from './ui/button';
@@ -11,7 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"; // Assuming you have this from shadcn
+} from "@/components/ui/dropdown-menu";
 
 const Navbar = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -34,6 +34,7 @@ const Navbar = () => {
             <NavLinkItem to="/" icon={<BotMessageSquare size={20} />} text="Home" />
             <NavLinkItem to="/models" icon={<LayoutGrid size={20} />} text="Model Catalog" />
             <NavLinkItem to="/pricing" icon={<Tags size={20} />} text="Pricing" />
+            <NavLinkItem to="/chat" icon={<MessageSquare size={20} />} text="Chat" /> {/* Added Chat NavLinkItem */}
             
             {isLoading ? (
               <Button variant="ghost" className="text-medium-text" disabled>Loading...</Button>
