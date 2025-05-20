@@ -109,12 +109,12 @@
 
   /* Chat header specific height */
   .chat-header {
-    height: 71px;
+    height: 65px;
   }
 
   @media (max-width: 768px) {
     .chat-header {
-      height: 71px; /* Maintain consistent height on mobile */
+      height: 65px; /* Maintain consistent height on mobile */
     }
   }
 }

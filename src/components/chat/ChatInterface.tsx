@@ -81,10 +81,10 @@ const ChatInterface = ({
     }
   };
 
-  // Header height target: 71px.
+  // Header height target: 65px.
   // Input area height (p-4 + input + border): approx 73px (16+40+16+1).
-  // New combinedFixedElementsHeight = 71px + 73px = 144px.
-  const combinedFixedElementsHeight = "144px";
+  // New combinedFixedElementsHeight = 65px + 73px = 138px.
+  const combinedFixedElementsHeight = "138px";
 
   return (
     <div className="flex flex-col h-full w-full bg-deep-bg text-light-text chat-container">
