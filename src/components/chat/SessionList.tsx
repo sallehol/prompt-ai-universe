@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Session, Message } from '@/types/chat'; // Message type for session.messages
+import { Session } from '@/types/chat'; // Message type for session.messages
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input'; // For rename dialog
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -162,9 +162,9 @@ const SessionList: React.FC<SessionListProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-card border-r border-border">
+    <div className="flex flex-col h-full bg-card">
       {/* Fixed header with New Chat button */}
-      <div className="p-3 flex-shrink-0">
+      <div className="p-3 border-b border-border flex-shrink-0">
         <Button
           onClick={handleNewChat}
           className="w-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center gap-2"
@@ -175,7 +175,7 @@ const SessionList: React.FC<SessionListProps> = ({
       </div>
       
       {/* Scrollable session list */}
-      <ScrollArea className="flex-grow">
+      <ScrollArea className="flex-grow px-1 py-2">
         {renderSessionGroup('Today', sessionGroups.today)}
         {renderSessionGroup('Yesterday', sessionGroups.yesterday)}
         {renderSessionGroup('Previous 7 Days', sessionGroups.previous7Days)}
@@ -186,7 +186,7 @@ const SessionList: React.FC<SessionListProps> = ({
       </ScrollArea>
       
       {/* Fixed footer with Clear Current Chat button */}
-      <div className="p-3 border-t border-border mt-auto flex-shrink-0">
+      <div className="p-3 border-t border-border flex-shrink-0">
         <Button
           onClick={() => activeSessionId && onClearCurrentChat(activeSessionId)}
           variant="ghost"

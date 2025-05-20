@@ -47,7 +47,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
   return (
     <div className="flex h-full w-full overflow-hidden">
       {/* Fixed width sidebar */}
-      <div className="w-72 flex-shrink-0 h-full bg-card border-r border-border">
+      <div className="w-72 flex-shrink-0 h-full bg-card border-r border-border overflow-hidden">
         <SessionList
           sessions={sessions}
           activeSessionId={activeSessionId}
@@ -92,6 +92,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
           />
         ) : (
           <EmptyState
+            title="Select or create a chat to begin"
+            message="Start a new conversation or continue an existing one from the sidebar."
             actionButton={
               <Button onClick={() => createSession()}>
                 <Plus size={16} className="mr-2" /> Start New Chat

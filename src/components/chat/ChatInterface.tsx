@@ -57,7 +57,7 @@ const ChatInterface = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-deep-bg text-light-text relative">
+    <div className="flex flex-col h-full w-full bg-deep-bg text-light-text">
       {/* Fixed header */}
       <div className="p-4 border-b border-border flex justify-between items-center bg-card flex-shrink-0">
         <h2 className="text-xl font-semibold text-neon-cyan">AI Chat</h2>
@@ -65,43 +65,45 @@ const ChatInterface = ({
       </div>
 
       {/* Scrollable messages area */}
-      <ScrollArea className="flex-grow p-4 md:p-6" ref={scrollAreaRef}>
-        <div ref={viewportRef} className="space-y-4 max-w-3xl mx-auto pb-32">
-          {messages.map((msg) => (
-            <ChatMessage
-              key={msg.id}
-              message={{
-                id: msg.id,
-                text: msg.content,
-                sender: msg.role === 'user' ? 'user' : 'ai',
-                timestamp: new Date(msg.timestamp),
-                isSaved: msg.isSaved,
-                model: msg.role === 'assistant' ? currentModel : undefined,
-              }}
-              onCopyToClipboard={handleCopyToClipboard}
-              onRegenerateResponse={handleInternalRegenerate}
-              onToggleSaveMessage={handleInternalToggleSave}
-            />
-          ))}
-          {isAiTyping && <TypingIndicator modelName={currentModel} />}
-        </div>
-      </ScrollArea>
+      <div className="flex-grow relative">
+        <ScrollArea className="h-full py-4 px-4 md:px-6" ref={scrollAreaRef}>
+          <div ref={viewportRef} className="space-y-4 max-w-3xl mx-auto">
+            {messages.map((msg) => (
+              <ChatMessage
+                key={msg.id}
+                message={{
+                  id: msg.id,
+                  text: msg.content,
+                  sender: msg.role === 'user' ? 'user' : 'ai',
+                  timestamp: new Date(msg.timestamp),
+                  isSaved: msg.isSaved,
+                  model: msg.role === 'assistant' ? currentModel : undefined,
+                }}
+                onCopyToClipboard={handleCopyToClipboard}
+                onRegenerateResponse={handleInternalRegenerate}
+                onToggleSaveMessage={handleInternalToggleSave}
+              />
+            ))}
+            {isAiTyping && <TypingIndicator modelName={currentModel} />}
+          </div>
+        </ScrollArea>
 
-      {/* Scroll to bottom button */}
-      {showScrollToBottom && (
-        <Button
-          variant="outline"
-          size="icon"
-          className="absolute bottom-28 md:bottom-28 right-6 md:right-8 bg-card/80 hover:bg-card border-border text-light-text rounded-full z-10 animate-fade-in"
-          onClick={() => scrollToBottom('smooth')}
-          aria-label="Scroll to bottom"
-        >
-          <ChevronDown size={20} />
-        </Button>
-      )}
+        {/* Scroll to bottom button */}
+        {showScrollToBottom && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="absolute bottom-4 right-4 bg-card/80 hover:bg-card border-border text-light-text rounded-full z-10 animate-fade-in"
+            onClick={() => scrollToBottom('smooth')}
+            aria-label="Scroll to bottom"
+          >
+            <ChevronDown size={20} />
+          </Button>
+        )}
+      </div>
 
       {/* Fixed input area */}
-      <div className="w-full fixed bottom-0 left-0 right-0 bg-deep-bg border-t border-border z-20 py-4 px-4 md:px-6">
+      <div className="bg-deep-bg border-t border-border px-4 py-4 md:px-6 flex-shrink-0">
         <div className="max-w-3xl mx-auto">
           <MessageInput onSendMessage={onSendMessage} />
         </div>
