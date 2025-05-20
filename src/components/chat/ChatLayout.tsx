@@ -45,8 +45,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      {/* Sidebar with session list - with precise border styling and dimensions */}
-      <div className="w-[286px] h-[455px] flex-shrink-0 bg-card border-r border-border overflow-hidden">
+      {/* Sidebar with session list - now h-full and flex flex-col, updated border */}
+      <div className="w-[286px] h-full flex-shrink-0 bg-card border-r border-border/40 overflow-hidden flex flex-col">
         <SessionList
           sessions={sessions}
           activeSessionId={activeSessionId}

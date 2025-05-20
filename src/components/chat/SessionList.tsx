@@ -163,8 +163,8 @@ const SessionList: React.FC<SessionListProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-card">
-      {/* Fixed header with New Chat button */}
-      <div className="p-3 border-b border-border flex-shrink-0">
+      {/* Fixed header with New Chat button - removed bottom border */}
+      <div className="p-3 flex-shrink-0">
         <Button
           onClick={handleNewChat}
           className="w-full bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center gap-2"
@@ -185,8 +185,8 @@ const SessionList: React.FC<SessionListProps> = ({
         )}
       </ScrollArea>
       
-      {/* Fixed footer with Clear Current Chat button */}
-      <div className="p-3 border-t border-border flex-shrink-0">
+      {/* Fixed footer with Clear Current Chat button - updated top border */}
+      <div className="p-3 border-t border-border/40 flex-shrink-0">
         <Button
           onClick={() => activeSessionId && onClearCurrentChat(activeSessionId)}
           variant="ghost"
