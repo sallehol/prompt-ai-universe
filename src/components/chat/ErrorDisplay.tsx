@@ -1,8 +1,7 @@
-
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, RefreshCw } from 'lucide-react';
-import type { ApiError } from '@/api/types'; // Updated import
+import type { ApiError } from '@/api/types/apiError'; // Updated import
 
 interface ErrorDisplayProps {
   error: ApiError;

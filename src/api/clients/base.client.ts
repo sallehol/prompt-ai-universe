@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import type { ApiError } from '@/api/types'; // Updated import
+import type { ApiError } from '@/api/types/apiError'; // Updated import
 import { normalizeApiError } from '@/utils/errorUtils';
 
 // The Supabase URL is hardcoded in supabaseClient.ts, we'll use that for consistency.
