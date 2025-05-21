@@ -1,9 +1,8 @@
-
 import { useCallback } from 'react';
 import { Session, Message } from '@/types/chat';
 import { createNewMessage } from '@/lib/chatUtils';
 import { logger } from '@/utils/logger';
-import { ApiError } from '@/api/clients/base.client';
+import type { ApiError } from '@/api/types';
 
 type UpdateSessionsFn = (updater: (prevSessions: Session[]) => Session[]) => void;
 
