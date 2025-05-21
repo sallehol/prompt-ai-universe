@@ -185,47 +185,70 @@ export class RateLimitingMiddleware implements Middleware {
   async before(req: Request, context: MiddlewareContext): Promise<Request | Response | void> {
     if (!context.user || !context.user.id) {
       console.warn('RateLimiting: No user ID in context, skipping.');
-      return; // No user, skip. Or could implement IP based rate limiting.
+      return; 
     }
 
     const userId = context.user.id;
-    // Provider should now be determined by ProviderDetectionMiddleware and set in context.provider.
-    // If not, use a default.
     const provider = context.provider || 'default'; 
     if (provider === 'default' && context.provider !== 'default') {
-        // This case should ideally not happen if ProviderDetectionMiddleware works.
-        // It means context.provider was set to something, but then evaluated as falsy here.
         console.warn(`RateLimiting: context.provider was '${context.provider}', but resolved to 'default'. Check provider values.`);
     } else if (!context.provider) {
         console.log(`RateLimiting: No provider in context, using 'default'. Request path: ${new URL(req.url).pathname}`);
     }
 
-
     try {
       const { allowed, remaining, reset, limit } = await this.rateLimiter.checkLimit(userId, provider as string);
       
+      // Store rate limit headers in context, ensuring remaining is not negative.
       context.rateLimitHeaders = {
         'X-RateLimit-Limit': limit.toString(),
-        'X-RateLimit-Remaining': remaining.toString(),
+        'X-RateLimit-Remaining': Math.max(0, remaining).toString(),
         'X-RateLimit-Reset': reset.toString()
       };
 
       if (!allowed) {
-        // Log details before returning error
-        console.log(`Rate limit exceeded for user ${userId}, provider ${provider}. Limit: ${limit}, Remaining: ${remaining}, Reset: ${new Date(reset * 1000).toISOString()}`);
-        return createErrorResponse(
-          ErrorType.RATE_LIMIT,
-          `Rate limit exceeded for ${provider}. Try again after ${new Date(reset * 1000).toISOString()}`,
-          429,
-          provider as string,
-          context.rateLimitHeaders 
-        );
+        console.log(`Rate limit exceeded for user ${userId}, provider ${provider}. Limit: ${limit}, Actual Remaining (can be <=0): ${remaining}, Reset: ${new Date(reset * 1000).toISOString()}`);
+        
+        const currentTimeInSeconds = Math.floor(Date.now() / 1000);
+        const retryAfterSeconds = Math.max(0, Math.ceil(reset - currentTimeInSeconds));
+
+        const errorBody = {
+          error: {
+            type: ErrorType.RATE_LIMIT,
+            message: `Rate limit exceeded for provider: ${provider}. Please try again after ${new Date(reset * 1000).toISOString()}`,
+            provider: provider as string,
+            limit: limit,
+            reset_time: reset, // Unix timestamp (seconds)
+            current_usage: limit, // When limit is exceeded, current usage is effectively the limit
+            retry_after: retryAfterSeconds,
+          }
+        };
+        
+        const responseHeaders = {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'X-RateLimit-Limit': limit.toString(),
+          'X-RateLimit-Remaining': '0', // Standard practice for 429
+          'X-RateLimit-Reset': reset.toString(),
+          'Retry-After': retryAfterSeconds.toString()
+        };
+        
+        // Store the structured error body in context.errorDetails for logging
+        context.errorDetails = errorBody;
+
+        return new Response(JSON.stringify(errorBody), {
+          status: 429,
+          headers: responseHeaders
+        });
       }
       // Store for incrementing usage in 'after' only if request was allowed
       context.rateLimit = { userId, provider: provider as string }; 
     } catch (error) {
       console.error('RateLimitingMiddleware "before" error:', error.message);
       // Fail open or handle error appropriately
+      // For now, let it pass through, but log the error.
+      // Potentially return a generic server error if preferred.
+      context.errorDetails = { message: error.message, source: 'RateLimitingMiddlewareCatch' };
     }
   }
   
@@ -253,10 +276,16 @@ export class RateLimitingMiddleware implements Middleware {
     // Body might have been consumed or transformed by other middleware (e.g. CachingMiddleware).
     // If context.responseBody exists, use it, otherwise read from res.
     let responseBodyContent: BodyInit | null = null;
-    if (context.responseBody && (res.headers.get('Content-Type')?.includes('application/json'))) {
+    // Check if response is already a stream (e.g. from main handler for streaming APIs)
+    // If so, we should not try to re-parse it as JSON or text.
+    if (res.body && res.headers.get('Content-Type')?.includes('application/octet-stream')) { // Or other stream types
+        responseBodyContent = res.body;
+    } else if (context.responseBody && (res.headers.get('Content-Type')?.includes('application/json'))) {
         responseBodyContent = JSON.stringify(context.responseBody);
     } else {
-        responseBodyContent = await res.text(); // Fallback to text if not JSON or no context.responseBody
+        // Clone if we need to read, as it might have been read or might be needed later.
+        const clonedRes = res.clone(); 
+        responseBodyContent = await clonedRes.text(); 
     }
     
     return new Response(responseBodyContent, {
