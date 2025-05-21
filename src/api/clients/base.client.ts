@@ -1,7 +1,6 @@
-
 import { supabase } from '@/lib/supabaseClient';
-import type { ApiError } from './base.client'; // Keep existing ApiError type if suitable
-import { normalizeApiError } from '@/utils/errorUtils'; // For consistent error handling
+import type { ApiError } from '@/api/types'; // Updated import
+import { normalizeApiError } from '@/utils/errorUtils';
 
 // The Supabase URL is hardcoded in supabaseClient.ts, we'll use that for consistency.
 const SUPABASE_PROJECT_URL = 'https://zxpywvtgpfqyazabsvlb.supabase.co';
@@ -12,7 +11,7 @@ export class BaseApiClient {
   protected timeout: number;
 
   constructor(timeout: number = 30000) {
-    this.baseUrl = `${SUPABASE_PROJECT_URL}/functions/v1/ai-proxy`;
+    this.baseUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_PROJECT_URL}/functions/v1/ai-proxy`;
     this.timeout = timeout;
     console.log(`[BaseApiClient] Initialized with baseUrl: ${this.baseUrl}`);
   }
@@ -36,6 +35,10 @@ export class BaseApiClient {
     return headers;
   }
 
+  // Overloads for the request method
+  protected async request<T_Response>(endpoint: string, method: string, body: any, isStreaming: true): Promise<ReadableStream<Uint8Array>>;
+  protected async request<T_Response>(endpoint: string, method: string, body?: any, isStreaming?: false): Promise<T_Response>;
+  // Implementation of the request method
   protected async request<T_Response>(
     endpoint: string,
     method: string,
@@ -58,18 +61,16 @@ export class BaseApiClient {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId); // Clear timeout if fetch completes/fails before timeout
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        let errorData: any = { message: response.statusText }; // Default error data
+        let errorData: any = { message: response.statusText };
         try {
           const textData = await response.text();
-          // console.log(`[BaseApiClient] Error response text: ${textData}`); // Log raw error text
           if(textData) errorData = JSON.parse(textData);
         } catch (e) {
           console.error('[BaseApiClient] Failed to parse error response JSON:', e);
         }
-        // Use the custom error handling logic
         this.handleAndThrowApiError(response.status, errorData, endpoint);
       }
 
@@ -82,26 +83,23 @@ export class BaseApiClient {
       }
       
       const responseData = await response.json();
-      // console.log(`[BaseApiClient] Response for ${method} ${endpoint}:`, responseData);
       return responseData as T_Response;
 
     } catch (error: any) {
-      clearTimeout(timeoutId); // Ensure timeout is cleared on any error
+      clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
         throw normalizeApiError({ status: 0, message: 'The request timed out.', type: 'network' });
       }
-      // If it's already an ApiError (e.g., thrown by getAuthHeaders or handleAndThrowApiError), rethrow it
       if (error.status !== undefined && error.type !== undefined) {
         throw error;
       }
       console.error(`[BaseApiClient] Unknown error during request to ${endpoint}:`, error);
-      throw normalizeApiError(error); // Normalize other errors
+      throw normalizeApiError(error);
     }
   }
   
   private handleAndThrowApiError(status: number, data: any, endpoint: string): never {
     let type: ApiError['type'] = 'unknown';
-    // Try to get message from standard Supabase Edge Function error structure or direct message
     let message = data?.error?.message || data?.message || data?.msg || 'An error occurred with the API request.';
     const provider = data?.error?.provider;
 
@@ -129,7 +127,7 @@ export class BaseApiClient {
     if (status === 401 || status === 403) return 'auth';
     if (status === 429) return 'rate_limit';
     if (status >= 500) return 'server';
-    if (status >= 400 && status < 500) return 'request'; // General client-side errors
+    if (status >= 400 && status < 500) return 'request';
     return 'unknown';
   }
 }

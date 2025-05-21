@@ -2,7 +2,7 @@
 import { useState, useCallback } from 'react';
 import { Session, Message } from '@/types/chat';
 import { ChatService } from '@/services/ChatService';
-import { ApiError } from '@/api/clients/base.client';
+import type { ApiError } from '@/api/types'; // Updated import
 import { logger } from '@/utils/logger';
 import { getModelConfig } from '@/config/modelConfig';
 import { createAuthError, normalizeApiError } from '@/utils/errorUtils';

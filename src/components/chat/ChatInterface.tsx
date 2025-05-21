@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import ChatMessage from './ChatMessage';
 import ModelSelector from './ModelSelector';
@@ -8,14 +9,14 @@ import { useChatToasts } from '@/hooks/useChatToasts';
 import { Message } from '@/types/chat';
 import { logger } from '@/utils/logger';
 import ErrorDisplay from './ErrorDisplay';
-import { ApiError } from '@/api/clients/base.client'; // Import ApiError
+import type { ApiError } from '@/api/types'; // Updated import
 
 interface ChatInterfaceProps {
   messages: Message[];
   currentModel: string;
   isAiTyping: boolean;
   isError: boolean;
-  errorDetails?: ApiError | null; // Updated to use ApiError type
+  errorDetails?: ApiError | null;
   onSendMessage: (text: string) => void;
   onSelectModel: (model: string) => void;
   onRegenerateResponse: (messageId: string) => void;

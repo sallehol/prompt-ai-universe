@@ -4,6 +4,7 @@ import type { ImageGenerationRequest, ImageGenerationResponse } from '../types';
 
 export class ImageGenerationClient extends BaseApiClient {
   async create(requestConfig: ImageGenerationRequest): Promise<ImageGenerationResponse> {
+    // This will now correctly infer Promise<ImageGenerationResponse>
     return this.request<ImageGenerationResponse>(
       '/api/image/generation',
       'POST',
@@ -12,3 +13,4 @@ export class ImageGenerationClient extends BaseApiClient {
   }
   // Add methods for /api/image/edit and /api/image/variation later if needed
 }
+

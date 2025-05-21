@@ -4,6 +4,7 @@ import type { TextCompletionRequest, TextCompletionResponse } from '../types';
 
 export class TextCompletionClient extends BaseApiClient {
   async create(requestConfig: TextCompletionRequest): Promise<TextCompletionResponse> {
+    // This will now correctly infer Promise<TextCompletionResponse>
     return this.request<TextCompletionResponse>(
       '/api/models/text/completion',
       'POST',
@@ -11,3 +12,4 @@ export class TextCompletionClient extends BaseApiClient {
     );
   }
 }
+

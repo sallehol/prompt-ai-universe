@@ -1,3 +1,4 @@
+
 import React from 'react';
 import SessionList from '@/components/chat/SessionList';
 import ChatInterface from '@/components/chat/ChatInterface';
@@ -8,8 +9,8 @@ import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { logger } from '@/utils/logger';
-import { ApiError } from '@/api/clients/base.client';
-import { getModelConfig } from '@/config/modelConfig'; // Import for model display name
+import type { ApiError } from '@/api/types'; // Updated import
+import { getModelConfig } from '@/config/modelConfig';
 
 interface ChatLayoutProps {
   sessions: Session[];
@@ -17,7 +18,7 @@ interface ChatLayoutProps {
   activeSessionId: string | null;
   isAiTyping: boolean;
   isError: boolean;
-  errorDetails?: ApiError | null; // Type updated to ApiError
+  errorDetails?: ApiError | null;
   createSession: () => string;
   switchSession: (id: string) => void;
   renameSession: (id: string, name: string) => void;

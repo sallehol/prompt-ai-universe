@@ -1,5 +1,5 @@
 
-import { ApiError } from '@/api/clients/base.client';
+import type { ApiError } from '@/api/types'; // Updated import
 import { logger } from '@/utils/logger';
 
 /**
