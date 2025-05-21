@@ -1,6 +1,5 @@
-
 // supabase/functions/ai-proxy/image-clients.ts
-import { ProviderName } from './providers.ts'
+import { ProviderName } from './providers/types.ts';
 
 // Base interface for all image provider clients
 export interface ImageProviderClient {
