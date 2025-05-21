@@ -219,46 +219,41 @@ export class RateLimitingMiddleware implements Middleware {
     try {
       const { allowed, remaining, reset, limit } = await this.rateLimiter.checkLimit(userId, provider as string);
       
+      // Store original detailed headers in context for potential use in 'after' or logging
       context.rateLimitHeaders = {
         'X-RateLimit-Limit': limit.toString(),
-        'X-RateLimit-Remaining': Math.max(0, remaining).toString(),
+        'X-RateLimit-Remaining': Math.max(0, remaining).toString(), // Ensure remaining is not negative
         'X-RateLimit-Reset': reset.toString()
       };
 
       if (!allowed) {
-        console.log(`Rate limit exceeded for user ${userId}, provider ${provider}. Limit: ${limit}, Actual Remaining (can be <=0): ${remaining}, Reset: ${new Date(reset * 1000).toISOString()}`);
+        // Log the detailed reason for rate limiting internally
+        console.log(`Rate limit exceeded for user ${userId}, provider ${provider}. Limit: ${limit}, Actual Remaining: ${remaining}, Reset: ${new Date(reset * 1000).toISOString()}`);
         
-        const currentTimeInSeconds = Math.floor(Date.now() / 1000);
-        const retryAfterSeconds = Math.max(0, Math.ceil(reset - currentTimeInSeconds));
-
+        // Simplified error body as per Approach 1
         const errorBody = {
           error: {
-            type: ErrorType.RATE_LIMIT,
-            message: `Rate limit exceeded for provider: ${provider}. Please try again after ${new Date(reset * 1000).toISOString()}`,
-            provider: provider as string,
-            limit: limit,
-            remaining: 0, 
-            reset_time: reset,
-            retry_after: retryAfterSeconds,
+            message: "Rate limit exceeded"
           }
         };
         
+        // Simplified headers as per Approach 1
+        // We still need CORS headers. Assuming corsHeaders from auth.ts contains 'Access-Control-Allow-Origin': '*'
         const responseHeaders = {
-          ...corsHeaders,
+          ...corsHeaders, // Keep essential CORS headers
           'Content-Type': 'application/json',
-          'X-RateLimit-Limit': limit.toString(),
-          'X-RateLimit-Remaining': '0', 
-          'X-RateLimit-Reset': reset.toString(),
-          'Retry-After': retryAfterSeconds.toString()
+          // Optionally, we can add Retry-After if it doesn't cause issues
+          // 'Retry-After': Math.ceil(Math.max(0, reset - Math.floor(Date.now() / 1000))).toString()
         };
         
-        console.log(`RateLimitingMiddleware: Returning 429 response with headers: ${JSON.stringify(responseHeaders)}`);
+        console.log(`RateLimitingMiddleware: Returning simplified 429 response with body: ${JSON.stringify(errorBody)} and headers: ${JSON.stringify(responseHeaders)}`);
+        
         const response = new Response(JSON.stringify(errorBody), {
           status: 429,
           headers: responseHeaders
         });
-        console.log(`RateLimitingMiddleware: 429 Response created successfully: ${response.status}`);
-        context.errorDetails = errorBody;
+        console.log(`RateLimitingMiddleware: Simplified 429 Response created successfully: ${response.status}`);
+        context.errorDetails = errorBody; // For logging middleware
 
         return response;
       }
@@ -266,6 +261,8 @@ export class RateLimitingMiddleware implements Middleware {
     } catch (error) {
       console.error('RateLimitingMiddleware "before" error:', error.message);
       context.errorDetails = { message: error.message, source: 'RateLimitingMiddlewareCatch' };
+      // Potentially return a generic error response here if the rate limiter itself fails,
+      // but for now, it might fall through or be handled by global error handling.
     }
   }
   

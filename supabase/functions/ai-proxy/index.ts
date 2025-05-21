@@ -193,7 +193,7 @@ serve(async (req: Request) => {
         .use(new RateLimitingMiddleware(supabaseClient))
         .use(new UsageLoggingMiddleware(supabaseClient));
       middlewareInitialized = true;
-      console.log("Middleware chain initialized with ProviderDetectionMiddleware.");
+      console.log("Middleware chain initialized.");
     }
     
     const context: MiddlewareContext = {
@@ -203,10 +203,24 @@ serve(async (req: Request) => {
     };
     
     const finalProcessedResponse = await middlewareChain.process(req, context);
-    console.log(`Serve function: MiddlewareChain.process returned Response with status: ${finalProcessedResponse.status}. About to return this response.`);
-    console.log(`Serve function: Response headers: ${JSON.stringify(Object.fromEntries(finalProcessedResponse.headers))}`);
+    
+    console.log(`Serve function: Final response status: ${finalProcessedResponse.status}`);
+    console.log(`Serve function: Final response headers: ${JSON.stringify(Object.fromEntries(finalProcessedResponse.headers))}`);
 
-    if (finalProcessedResponse.body) {
+    if (finalProcessedResponse.status === 429) {
+      console.log("Serve function: Returning 429 response to client.");
+      if (finalProcessedResponse.body) {
+        try {
+          const clonedRes = finalProcessedResponse.clone();
+          const bodyText = await clonedRes.text();
+          console.log(`Serve function: 429 Response body: ${bodyText}`);
+        } catch (e) {
+          console.error(`Serve function: Error cloning/reading 429 response body for logging: ${e.message}`);
+        }
+      } else {
+        console.log(`Serve function: 429 Response body is null.`);
+      }
+    } else if (finalProcessedResponse.body) {
         try {
             const clonedRes = finalProcessedResponse.clone();
             const bodyText = await clonedRes.text();
@@ -215,8 +229,9 @@ serve(async (req: Request) => {
             console.error(`Serve function: Error cloning/reading final response body for logging: ${e.message}`);
         }
     } else {
-        console.log(`Serve function: Response body is null.`);
+        console.log(`Serve function: Response body is null (non-429).`);
     }
+    
     return finalProcessedResponse;
 
   } catch (error) {
