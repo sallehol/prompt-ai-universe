@@ -231,14 +231,15 @@ export class RateLimitingMiddleware implements Middleware {
         const currentTimeInSeconds = Math.floor(Date.now() / 1000);
         const retryAfterSeconds = Math.max(0, Math.ceil(reset - currentTimeInSeconds));
 
+        // Updated errorBody to match the requested structure
         const errorBody = {
           error: {
             type: ErrorType.RATE_LIMIT,
             message: `Rate limit exceeded for provider: ${provider}. Please try again after ${new Date(reset * 1000).toISOString()}`,
             provider: provider as string,
             limit: limit,
+            remaining: 0, // As per request, ensure 'remaining' is in the body and set to 0
             reset_time: reset,
-            current_usage: limit, 
             retry_after: retryAfterSeconds,
           }
         };
@@ -263,6 +264,9 @@ export class RateLimitingMiddleware implements Middleware {
     } catch (error) {
       console.error('RateLimitingMiddleware "before" error:', error.message);
       context.errorDetails = { message: error.message, source: 'RateLimitingMiddlewareCatch' };
+      // Optionally return a generic server error if the rate limiter itself fails
+      // For now, it fails open by not returning a Response, allowing the request to proceed
+      // or be caught by global error handling. Consider if a 500 here is more appropriate.
     }
   }
   
@@ -274,6 +278,7 @@ export class RateLimitingMiddleware implements Middleware {
       }
     }
 
+    // Increment usage only for successful or client-error responses, not for server errors or if rate limited (429)
     if (context.rateLimit && (res.status >= 200 && res.status < 500 && res.status !== 429)) {
       try {
         await this.rateLimiter.incrementUsage(context.rateLimit.userId, context.rateLimit.provider);
@@ -286,13 +291,23 @@ export class RateLimitingMiddleware implements Middleware {
     let responseBodyContent: BodyInit | null = null;
     const contentType = res.headers.get('Content-Type');
 
+    // Preserve streaming responses
     if (res.body && (contentType?.includes('text/event-stream') || contentType?.includes('application/octet-stream'))) {
-        responseBodyContent = res.body; // Pass stream body directly
-    } else if (context.responseBody && contentType?.includes('application/json')) {
+        responseBodyContent = res.body; 
+    } else if (context.responseBody && contentType?.includes('application/json')) { // Use parsed body if available and JSON
         responseBodyContent = JSON.stringify(context.responseBody);
     } else if (res.body) { // Fallback for other types or if context.responseBody is not set
-        const clonedRes = res.clone(); 
-        responseBodyContent = await clonedRes.text(); 
+        // Clone only if necessary to avoid consuming the body if it's already been used or is a stream
+        // This part can be tricky; ideally, context.responseBody should be reliably set for non-streams.
+        try {
+            const clonedRes = res.clone(); 
+            responseBodyContent = await clonedRes.text(); 
+        } catch (e) {
+            // If cloning fails (e.g. body already used), and it's not a stream, this could be an issue.
+            // For now, we assume if it's not a known stream type and responseBody isn't set, it might be empty or problematic.
+            console.warn("RateLimitingMiddleware after: Could not clone/read response body.", e.message)
+            responseBodyContent = null; // Or res.body, if we want to risk passing an already consumed stream
+        }
     }
     
     return new Response(responseBodyContent, {
