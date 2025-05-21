@@ -1,11 +1,10 @@
-
 // supabase/functions/ai-proxy/provider-clients.ts
 import { ProviderName } from './providers.ts'
 
 // Base interface for all provider clients
 export interface ProviderClient {
-  makeTextRequest(params: any): Promise<any>;
-  makeChatRequest(params: any): Promise<any>;
+  makeTextRequest(params: any): Promise<any>; // Can return Response object or JSON data
+  makeChatRequest(params: any): Promise<any>; // Can return Response object or JSON data
 }
 
 // OpenAI Client
@@ -18,21 +17,26 @@ class OpenAIClient implements ProviderClient {
   }
   
   async makeTextRequest(params: any): Promise<any> {
-    const { model, prompt, max_tokens = 1000, temperature = 0.7, ...rest } = params;
+    const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
     
+    const bodyPayload: any = {
+      model,
+      prompt,
+      max_tokens,
+      temperature,
+      ...rest
+    };
+    if (stream) {
+      bodyPayload.stream = true;
+    }
+
     const response = await fetch(`${this.baseUrl}/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`
       },
-      body: JSON.stringify({
-        model,
-        prompt,
-        max_tokens,
-        temperature,
-        ...rest
-      })
+      body: JSON.stringify(bodyPayload)
     });
     
     if (!response.ok) {
@@ -41,11 +45,25 @@ class OpenAIClient implements ProviderClient {
       throw new Error(errorData.error?.message || `OpenAI request failed with status ${response.status}`);
     }
     
+    if (stream) {
+      return response; // Return the full Response object for streaming
+    }
     return await response.json();
   }
   
   async makeChatRequest(params: any): Promise<any> {
-    const { model, messages, max_tokens = 1000, temperature = 0.7, ...rest } = params;
+    const { model, messages, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
+    
+    const bodyPayload: any = {
+      model,
+      messages,
+      max_tokens,
+      temperature,
+      ...rest
+    };
+    if (stream) {
+      bodyPayload.stream = true;
+    }
     
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -53,13 +71,7 @@ class OpenAIClient implements ProviderClient {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens,
-        temperature,
-        ...rest
-      })
+      body: JSON.stringify(bodyPayload)
     });
     
     if (!response.ok) {
@@ -68,6 +80,9 @@ class OpenAIClient implements ProviderClient {
       throw new Error(errorData.error?.message || `OpenAI request failed with status ${response.status}`);
     }
     
+    if (stream) {
+      return response; // Return the full Response object for streaming
+    }
     return await response.json();
   }
 }
@@ -84,24 +99,26 @@ class AnthropicClient implements ProviderClient {
   async makeTextRequest(params: any): Promise<any> {
     // Anthropic doesn't support standalone text completion via the /v1/messages endpoint well,
     // so we adapt it by forming a simple chat request.
-    const { model, prompt, max_tokens = 1000, temperature = 0.7, ...rest } = params;
+    // Streaming for this adapted text request will depend on makeChatRequest's streaming.
+    const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
     
     return this.makeChatRequest({
-      model, // Pass the original model
+      model, 
       messages: [{ role: 'user', content: prompt }],
       max_tokens,
       temperature,
+      stream, // Pass stream parameter
       ...rest
     });
   }
   
   async makeChatRequest(params: any): Promise<any> {
-    const { model, messages, max_tokens = 1000, temperature = 0.7, system, ...rest } = params;
+    const { model, messages, max_tokens = 1000, temperature = 0.7, system, stream, ...rest } = params;
     
     const requestBody: any = {
       model,
       messages: messages.map((m: { role: string; content: string }) => ({
-        role: m.role === 'user' ? 'user' : 'assistant', // System messages handled separately if provided
+        role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content
       })),
       max_tokens,
@@ -111,6 +128,9 @@ class AnthropicClient implements ProviderClient {
 
     if (system) {
       requestBody.system = system;
+    }
+    if (stream) {
+      requestBody.stream = true;
     }
     
     const response = await fetch(`${this.baseUrl}/messages`, {
@@ -129,12 +149,21 @@ class AnthropicClient implements ProviderClient {
       throw new Error(errorData.error?.message || errorData.error?.type || `Anthropic request failed with status ${response.status}`);
     }
     
-    const result = await response.json();
+    if (stream) {
+      // For Anthropic, if we want to return an OpenAI-like SSE stream,
+      // we'd need a transformation stream here.
+      // For now, returning raw Anthropic stream. Client needs to handle its format.
+      // Or, if the goal is for the proxy to abstract this, this part needs more work.
+      // For this fix, let's assume if Anthropic is streamed, client handles Anthropic SSE.
+      return response; // Return full Response object
+    }
     
+    // Non-streaming: parse and transform to OpenAI-like format
+    const result = await response.json();
     return {
       id: result.id,
       object: 'chat.completion',
-      created: Math.floor(Date.now() / 1000), // Approximation
+      created: Math.floor(Date.now() / 1000), 
       model: result.model,
       choices: [
         {
@@ -146,7 +175,7 @@ class AnthropicClient implements ProviderClient {
           finish_reason: result.stop_reason === 'max_tokens' ? 'length' : result.stop_reason || 'stop',
         }
       ],
-      usage: { // Anthropic API provides usage in the response
+      usage: { 
         prompt_tokens: result.usage?.input_tokens || -1,
         completion_tokens: result.usage?.output_tokens || -1,
         total_tokens: (result.usage?.input_tokens || 0) + (result.usage?.output_tokens || 0) || -1,
@@ -165,8 +194,15 @@ class GoogleClient implements ProviderClient {
   }
   
   async makeTextRequest(params: any): Promise<any> {
-    const { model, prompt, max_tokens = 1000, temperature = 0.7, ...rest } = params;
+    const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
     const modelId = model.startsWith('google/') ? model.substring('google/'.length) : model;
+
+    // Google's REST API for generateContent doesn't support streaming in the same way OpenAI does.
+    // It has a separate streamGenerateContent method or specific SDK handling.
+    // For this fix, we'll assume non-streaming for Google text, or it would require a dedicated stream handler.
+    if (stream) {
+        console.warn("GoogleClient: makeTextRequest streaming not implemented in a way compatible with generic SSE processor. Falling back to non-streaming.");
+    }
     
     const response = await fetch(
       `${this.baseUrl}/models/${modelId}:generateContent?key=${this.apiKey}`,
@@ -192,7 +228,7 @@ class GoogleClient implements ProviderClient {
     
     const result = await response.json();
     return {
-      id: `google-${Date.now()}`, // Approximation
+      id: `google-${Date.now()}`, 
       object: 'text_completion',
       created: Math.floor(Date.now() / 1000),
       model: model,
@@ -204,16 +240,20 @@ class GoogleClient implements ProviderClient {
           finish_reason: result.candidates[0].finishReason || 'stop'
         }
       ],
-      usage: { prompt_tokens: -1, completion_tokens: -1, total_tokens: -1 }
+      usage: { prompt_tokens: -1, completion_tokens: -1, total_tokens: -1 } // Placeholder
     };
   }
   
   async makeChatRequest(params: any): Promise<any> {
-    const { model, messages, max_tokens = 1000, temperature = 0.7, ...rest } = params;
+    const { model, messages, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
     const modelId = model.startsWith('google/') ? model.substring('google/'.length) : model;
-    
+
+    if (stream) {
+        console.warn("GoogleClient: makeChatRequest streaming not implemented in a way compatible with generic SSE processor. Falling back to non-streaming.");
+    }
+
     const contents = messages.map((msg: {role: string, content: string}) => ({
-      role: msg.role === 'assistant' ? 'model' : msg.role, // 'user' or 'system' (system becomes user for older models)
+      role: msg.role === 'assistant' ? 'model' : msg.role,
       parts: [{ text: msg.content }]
     }));
     
@@ -241,7 +281,7 @@ class GoogleClient implements ProviderClient {
     
     const result = await response.json();
     return {
-      id: `google-chat-${Date.now()}`, // Approximation
+      id: `google-chat-${Date.now()}`,
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
       model: model,
@@ -255,7 +295,7 @@ class GoogleClient implements ProviderClient {
           finish_reason: result.candidates[0].finishReason || 'stop'
         }
       ],
-      usage: { prompt_tokens: -1, completion_tokens: -1, total_tokens: -1 }
+      usage: { prompt_tokens: -1, completion_tokens: -1, total_tokens: -1 } // Placeholder
     };
   }
 }
@@ -270,37 +310,49 @@ class MistralClient implements ProviderClient {
   }
   
   async makeTextRequest(params: any): Promise<any> {
-    const { model, prompt, max_tokens = 1000, temperature = 0.7, ...rest } = params;
+    const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
+    // Mistral text completions can be simulated via chat completions
     return this.makeChatRequest({
       model,
       messages: [{ role: 'user', content: prompt }],
       max_tokens,
       temperature,
+      stream, // Pass stream parameter
       ...rest
     });
   }
   
   async makeChatRequest(params: any): Promise<any> {
-    const { model, messages, max_tokens = 1000, temperature = 0.7, ...rest } = params;
+    const { model, messages, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
+    
+    const bodyPayload: any = {
+      model,
+      messages,
+      max_tokens,
+      temperature,
+      ...rest
+    };
+    if (stream) {
+      bodyPayload.stream = true;
+    }
+
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens,
-        temperature,
-        ...rest
-      })
+      body: JSON.stringify(bodyPayload)
     });
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
       console.error('Mistral chat request failed:', errorData);
       throw new Error(errorData.error?.message || `Mistral request failed with status ${response.status}`);
+    }
+
+    if (stream) {
+      return response; // Return the full Response object for streaming
     }
     return await response.json();
   }
@@ -317,13 +369,8 @@ export function createProviderClient(provider: ProviderName, apiKey: string): Pr
       return new GoogleClient(apiKey);
     case ProviderName.MISTRAL:
       return new MistralClient(apiKey);
-    // Add other providers as needed
-    // Consider cases for ProviderName.META, ProviderName.COHERE, ProviderName.DEEPSEEK etc.
     default:
       console.warn(`Provider client for '${provider}' is not implemented. Falling back to a dummy client or throwing error.`);
-      // For now, throw an error for unhandled providers that require keys.
-      // If a provider might not need a key (e.g. local model), handle differently.
       throw new Error(`Unsupported provider: ${provider}`);
   }
 }
-

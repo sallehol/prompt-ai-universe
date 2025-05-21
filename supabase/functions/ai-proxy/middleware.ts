@@ -72,7 +72,6 @@ export class ProviderDetectionMiddleware implements Middleware {
       }
     }
   }
-  // No 'after' method needed for this specific middleware
 }
 
 // Caching middleware
@@ -83,32 +82,50 @@ export class CachingMiddleware implements Middleware {
   constructor(supabaseClient: SupabaseClient) {
     this.cache = new SupabaseCache(supabaseClient);
     this.cacheableEndpoints = new Set([
-      // Format: category/type/action or category/action
       'models/text/completion',
       'models/chat/completion',
-      // 'image/generation' // Image generation is often non-deterministic, consider carefully
     ]);
   }
   
   private isCacheable(pathParts: string[]): boolean {
-    if (pathParts.length < 3) return false; // e.g. api/models/text/completion (4 parts)
-    // ai-proxy/api/models/text/completion -> pathParts[1]=api, pathParts[2]=models, etc.
-    const endpointKey = pathParts.slice(2).join('/'); // e.g. models/text/completion
+    if (pathParts.length < 3) return false; 
+    const endpointKey = pathParts.slice(2).join('/'); 
     return this.cacheableEndpoints.has(endpointKey);
   }
   
   async before(req: Request, context: MiddlewareContext): Promise<Request | Response | void> {
-    if (req.method !== 'POST') { // Assuming most AI requests are POST
+    if (req.method !== 'POST') { 
       return;
     }
     
     const url = new URL(req.url);
-    const pathParts = url.pathname.split('/').filter(Boolean); // e.g. [functions, v1, ai-proxy, api, models, text, completion]
+    const pathParts = url.pathname.split('/').filter(Boolean); 
     const apiPathIndex = pathParts.findIndex(p => p === 'ai-proxy') + 1;
-    const relevantPath = pathParts.slice(apiPathIndex); // e.g. [api, models, text, completion]
+    const relevantPath = pathParts.slice(apiPathIndex); 
 
     if (!this.isCacheable(relevantPath)) {
       return;
+    }
+
+    // If ProviderDetectionMiddleware ran, context.requestParams is available
+    let isStreamingRequest = false;
+    if (context.requestParams && context.requestParams.stream === true) {
+        isStreamingRequest = true;
+    } else if (!context.requestParams) {
+        // Fallback: try to parse if not already parsed (should be rare if ProviderDetectionMiddleware is first)
+        try {
+            const clonedReq = req.clone();
+            const body = await clonedReq.json();
+            context.requestParams = body; // Store for other uses
+            if (body.stream === true) {
+                isStreamingRequest = true;
+            }
+        } catch (e) { /* ignore if not JSON or already parsed */ }
+    }
+    
+    if (isStreamingRequest) {
+      console.log('CachingMiddleware: Skipping cache for streaming request.');
+      return; // Do not cache or serve from cache for streaming requests
     }
 
     try {
@@ -119,12 +136,12 @@ export class CachingMiddleware implements Middleware {
           const clonedReq = req.clone(); 
           context.requestParams = await clonedReq.json();
       }
-      const params = context.requestParams;
+      const params = context.requestParams || (await req.clone().json()); // Ensure params is available
 
       // Provider should be in context from ProviderDetectionMiddleware
       // Fallback if not set, or if provider is part of cache key logic itself
       const providerForCache = context.provider || (params && params.provider) || 'unknown_provider_for_cache';
-      const endpoint = relevantPath.slice(1).join('/'); // e.g. models/text/completion
+      const endpoint = relevantPath.slice(1).join('/');
       
       const cacheKey = SupabaseCache.generateCacheKey(providerForCache as string, endpoint, params);
       context.cacheKey = cacheKey; // Store for after middleware
@@ -145,23 +162,22 @@ export class CachingMiddleware implements Middleware {
   }
   
   async after(_req: Request, res: Response, context: MiddlewareContext): Promise<Response | void> {
-    if (!context.cacheKey || res.status !== 200) {
+    if (!context.cacheKey || res.status !== 200 || res.headers.get('Content-Type')?.includes('text/event-stream')) {
       return;
     }
     
     try {
-      // context.responseBody might be set by main handler or here
       if (!context.responseBody) {
+        // This part is tricky if res is a stream that was already consumed by the client.
+        // However, we should not reach here for streams due to the check above.
         const clonedRes = res.clone();
-        context.responseBody = await clonedRes.json(); // Store for logging
+        context.responseBody = await clonedRes.json(); 
       }
       await this.cache.set(context.cacheKey, context.responseBody);
       
       const newHeaders = new Headers(res.headers);
-      newHeaders.set('X-Cache', 'MISS'); // Was a miss, now cached
+      newHeaders.set('X-Cache', 'MISS');
       
-      // Return a new response with potentially modified body (if it was stringified from context.responseBody)
-      // and new headers.
       return new Response(JSON.stringify(context.responseBody), {
         status: res.status,
         statusText: res.statusText,
@@ -170,6 +186,10 @@ export class CachingMiddleware implements Middleware {
 
     } catch (error) {
       console.error('CachingMiddleware "after" error:', error.message);
+      // If error occurs (e.g. trying to clone/read an already used stream body),
+      // just return the original response without new headers to avoid breaking client.
+      // This might happen if a stream somehow bypasses the Content-Type check.
+      return res; 
     }
   }
 }
@@ -199,7 +219,6 @@ export class RateLimitingMiddleware implements Middleware {
     try {
       const { allowed, remaining, reset, limit } = await this.rateLimiter.checkLimit(userId, provider as string);
       
-      // Store rate limit headers in context, ensuring remaining is not negative.
       context.rateLimitHeaders = {
         'X-RateLimit-Limit': limit.toString(),
         'X-RateLimit-Remaining': Math.max(0, remaining).toString(),
@@ -218,8 +237,8 @@ export class RateLimitingMiddleware implements Middleware {
             message: `Rate limit exceeded for provider: ${provider}. Please try again after ${new Date(reset * 1000).toISOString()}`,
             provider: provider as string,
             limit: limit,
-            reset_time: reset, // Unix timestamp (seconds)
-            current_usage: limit, // When limit is exceeded, current usage is effectively the limit
+            reset_time: reset,
+            current_usage: limit, 
             retry_after: retryAfterSeconds,
           }
         };
@@ -228,12 +247,11 @@ export class RateLimitingMiddleware implements Middleware {
           ...corsHeaders,
           'Content-Type': 'application/json',
           'X-RateLimit-Limit': limit.toString(),
-          'X-RateLimit-Remaining': '0', // Standard practice for 429
+          'X-RateLimit-Remaining': '0', 
           'X-RateLimit-Reset': reset.toString(),
           'Retry-After': retryAfterSeconds.toString()
         };
         
-        // Store the structured error body in context.errorDetails for logging
         context.errorDetails = errorBody;
 
         return new Response(JSON.stringify(errorBody), {
@@ -241,19 +259,14 @@ export class RateLimitingMiddleware implements Middleware {
           headers: responseHeaders
         });
       }
-      // Store for incrementing usage in 'after' only if request was allowed
       context.rateLimit = { userId, provider: provider as string }; 
     } catch (error) {
       console.error('RateLimitingMiddleware "before" error:', error.message);
-      // Fail open or handle error appropriately
-      // For now, let it pass through, but log the error.
-      // Potentially return a generic server error if preferred.
       context.errorDetails = { message: error.message, source: 'RateLimitingMiddlewareCatch' };
     }
   }
   
   async after(req: Request, res: Response, context: MiddlewareContext): Promise<Response | void> {
-    // Always attach rate limit headers if they were prepared
     const newHeaders = new Headers(res.headers);
     if (context.rateLimitHeaders) {
       for (const [key, value] of Object.entries(context.rateLimitHeaders)) {
@@ -261,8 +274,6 @@ export class RateLimitingMiddleware implements Middleware {
       }
     }
 
-    // Increment usage if rateLimit context was set (meaning request was allowed by 'before' hook)
-    // and the response is not a server error or the rate limit error itself.
     if (context.rateLimit && (res.status >= 200 && res.status < 500 && res.status !== 429)) {
       try {
         await this.rateLimiter.incrementUsage(context.rateLimit.userId, context.rateLimit.provider);
@@ -272,18 +283,14 @@ export class RateLimitingMiddleware implements Middleware {
       }
     }
     
-    // Create a new response to apply headers.
-    // Body might have been consumed or transformed by other middleware (e.g. CachingMiddleware).
-    // If context.responseBody exists, use it, otherwise read from res.
     let responseBodyContent: BodyInit | null = null;
-    // Check if response is already a stream (e.g. from main handler for streaming APIs)
-    // If so, we should not try to re-parse it as JSON or text.
-    if (res.body && res.headers.get('Content-Type')?.includes('application/octet-stream')) { // Or other stream types
-        responseBodyContent = res.body;
-    } else if (context.responseBody && (res.headers.get('Content-Type')?.includes('application/json'))) {
+    const contentType = res.headers.get('Content-Type');
+
+    if (res.body && (contentType?.includes('text/event-stream') || contentType?.includes('application/octet-stream'))) {
+        responseBodyContent = res.body; // Pass stream body directly
+    } else if (context.responseBody && contentType?.includes('application/json')) {
         responseBodyContent = JSON.stringify(context.responseBody);
-    } else {
-        // Clone if we need to read, as it might have been read or might be needed later.
+    } else if (res.body) { // Fallback for other types or if context.responseBody is not set
         const clonedRes = res.clone(); 
         responseBodyContent = await clonedRes.text(); 
     }
@@ -306,7 +313,6 @@ export class UsageLoggingMiddleware implements Middleware {
   
   async before(_req: Request, context: MiddlewareContext): Promise<void> {
     context.requestStartTime = Date.now();
-    // requestParams should be populated by ProviderDetectionMiddleware or CachingMiddleware
   }
   
   async after(req: Request, res: Response, context: MiddlewareContext): Promise<void> {
@@ -316,50 +322,51 @@ export class UsageLoggingMiddleware implements Middleware {
     }
 
     const userId = context.user.id;
-    // Provider should be in context from ProviderDetectionMiddleware
     const providerForLog = context.provider || 'unknown_provider_log';
     let modelForLog = 'unknown_model_log';
     
-    // context.requestParams should be set by ProviderDetectionMiddleware or CachingMiddleware
     if (context.requestParams && context.requestParams.model) {
         modelForLog = context.requestParams.model;
     } else if (req.method === 'POST' && !context.requestParams) {
-        // Fallback if earlier middleware didn't parse (should be rare)
         try {
             const clonedReq = req.clone();
             const body = await clonedReq.json();
             modelForLog = body.model || modelForLog;
             context.requestParams = body; 
-        } catch (e) { /* ignore if not JSON or already parsed */ }
+        } catch (e) { /* ignore */ }
     }
-
 
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/').filter(Boolean);
     const apiPathIndex = pathParts.findIndex(p => p === 'ai-proxy') + 1;
-    const endpoint = pathParts.slice(apiPathIndex +1).join('/'); // e.g. models/text/completion or usage/summary
+    const endpoint = pathParts.slice(apiPathIndex +1).join('/');
 
 
-    // Try to get response body if not already in context (e.g. from CachingMiddleware's after hook)
     let responseBodyToLog = context.responseBody;
-    let errorDetailsToLog = context.errorDetails; // Should be set by MiddlewareChain's error handling or main handler
+    let errorDetailsToLog = context.errorDetails;
+
+    // Avoid parsing stream responses for logging body
+    const contentType = res.headers.get('Content-Type');
+    const isStreamingResponse = contentType?.includes('text/event-stream');
 
     if (res.status !== 200 && !errorDetailsToLog) {
         try {
-            // Clone response as it might have been read
             const clonedRes = res.clone();
-            errorDetailsToLog = await clonedRes.json();
+            errorDetailsToLog = await clonedRes.json(); // Error responses are usually JSON
         } catch (e) {
             errorDetailsToLog = { status: res.status, message: res.statusText || "Failed to parse error response body for logging" };
         }
-    } else if (res.status === 200 && !responseBodyToLog) {
+    } else if (res.status === 200 && !responseBodyToLog && !isStreamingResponse) { // Only try to parse if not streaming
          try {
             const clonedRes = res.clone();
             responseBodyToLog = await clonedRes.json();
         } catch (e) { 
-            console.warn("UsageLogging: Could not parse success response for logging. It might not be JSON or was already consumed.");
+            console.warn("UsageLogging: Could not parse success JSON response for logging.");
         }
+    } else if (isStreamingResponse) {
+        responseBodyToLog = { note: "Streaming response, body not logged." };
     }
+
 
     try {
       await this.usageLogger.logRequest(
@@ -367,10 +374,10 @@ export class UsageLoggingMiddleware implements Middleware {
         providerForLog as string,
         modelForLog,
         endpoint,
-        context.requestParams || {note: "No JSON body or params in GET"},
+        context.requestParams || {note: "No JSON body or params in GET/stream"},
         res.status,
-        responseBodyToLog, // Already parsed if available
-        errorDetailsToLog   // Already parsed if available
+        responseBodyToLog, 
+        errorDetailsToLog
       );
     } catch (error) {
       console.error('UsageLoggingMiddleware "after" error:', error.message);
@@ -393,13 +400,11 @@ export class MiddlewareChain {
     let currentReq = req;
     let finalResponse: Response | null = null;
 
-    // Process "before" hooks
     for (const middleware of this.middlewares) {
       if (middleware.before) {
         const result = await middleware.before(currentReq, context);
-        if (result instanceof Response) { // Short-circuit if a response is returned
+        if (result instanceof Response) { 
           finalResponse = result;
-          // Capture error details if the response is an error
           if (finalResponse.status >= 400 && !context.errorDetails) {
             try {
                 const clonedFinalResponse = finalResponse.clone();
@@ -410,50 +415,45 @@ export class MiddlewareChain {
           }
           break; 
         }
-        if (result instanceof Request) { // Update request if modified
+        if (result instanceof Request) { 
           currentReq = result;
         }
       }
     }
 
-    // If not short-circuited by a "before" hook, call the main handler
     if (!finalResponse) {
         try {
             finalResponse = await context.handler(currentReq, context);
-            // If handler returns a successful response, try to parse and store body if JSON
-            if (finalResponse.status >= 200 && finalResponse.status < 300 && finalResponse.headers.get('Content-Type')?.includes('application/json') && !context.responseBody) {
+            const finalContentType = finalResponse.headers.get('Content-Type');
+            if (finalResponse.status >= 200 && finalResponse.status < 300 && finalContentType?.includes('application/json') && !context.responseBody) {
                 try {
                     const clonedFinalResponse = finalResponse.clone();
                     context.responseBody = await clonedFinalResponse.json();
                 } catch(e) {
-                    console.warn("MiddlewareChain: Could not parse successful handler response body for context.");
+                    console.warn("MiddlewareChain: Could not parse successful handler JSON response body for context.");
                 }
             }
         } catch(e) {
             console.error("Error in main handler:", e.message, e.stack ? e.stack.split('\n')[0] : '');
-            context.errorDetails = { message: e.message, stack: e.stack, source: 'mainHandler' }; // Store error for logging
+            context.errorDetails = { message: e.message, stack: e.stack, source: 'mainHandler' }; 
             finalResponse = createErrorResponse(ErrorType.SERVER, e.message || "Error in handler", 500);
         }
     }
     
-    // Process "after" hooks in reverse order
-    // Pass the 'finalResponse' which could be from a 'before' hook or the main handler
     let responseForAfterHooks = finalResponse;
     for (const middleware of [...this.middlewares].reverse()) {
       if (middleware.after) {
-        // Ensure responseForAfterHooks is not null, though it should always be a Response object by now
         if (responseForAfterHooks === null) {
             console.error("MiddlewareChain: finalResponse is null before 'after' hooks. This should not happen.");
-            // Create a generic error response if somehow null
             responseForAfterHooks = createErrorResponse(ErrorType.SERVER, "Internal error in middleware processing", 500);
         }
         const result = await middleware.after(currentReq, responseForAfterHooks, context);
-        if (result instanceof Response) { // Update response if modified
+        if (result instanceof Response) { 
           responseForAfterHooks = result;
         }
       }
     }
     
-    return responseForAfterHooks!; // Assert non-null, as it's initialized or created
+    return responseForAfterHooks!; 
   }
 }
