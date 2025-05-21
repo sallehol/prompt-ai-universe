@@ -1,4 +1,3 @@
-
 // supabase/functions/ai-proxy/cache.ts
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2' // Use SupabaseClient type
 
@@ -43,6 +42,7 @@ export class SupabaseCache implements CacheProvider {
   }
   
   async get(key: string): Promise<any> {
+    console.log(`SupabaseCache.get: Cache lookup for key: ${key}`);
     try {
       // Get the cache entry
       const { data, error } = await this.supabaseClient
@@ -52,14 +52,16 @@ export class SupabaseCache implements CacheProvider {
         .single();
       
       if (error) {
-        // PGRST116: Row not found, not an actual error for cache miss
-        if (error.code !== 'PGRST116') {
-          console.error('Cache get error:', error);
+        if (error.code !== 'PGRST116') { // PGRST116: Row not found, not an actual error for cache miss
+          console.error('SupabaseCache.get: Error fetching from cache table:', error);
+        } else {
+          console.log(`SupabaseCache.get: Cache MISS (PGRST116) for key: ${key}`);
         }
         return null;
       }
       
       if (!data) {
+        console.log(`SupabaseCache.get: Cache MISS (no data) for key: ${key}`);
         return null;
       }
       
@@ -69,20 +71,21 @@ export class SupabaseCache implements CacheProvider {
       const ttlInSeconds = data.ttl || 3600; // Default TTL is 1 hour (3600 seconds)
       
       if ((now.getTime() - createdAt.getTime()) / 1000 > ttlInSeconds) {
-        // Cache entry has expired, delete it
+        console.log(`SupabaseCache.get: Cache EXPIRED for key: ${key}. Deleting.`);
         await this.delete(key);
-        console.log(`Cache expired and deleted for key: ${key}`);
         return null;
       }
       
+      console.log(`SupabaseCache.get: Cache HIT for key: ${key}`);
       return data.value;
     } catch (error) {
-      console.error('Cache get error (exception):', error);
+      console.error('SupabaseCache.get: Exception during cache get:', error);
       return null;
     }
   }
   
   async set(key: string, value: any, ttl: number = 3600): Promise<void> {
+    console.log(`SupabaseCache.set: Setting cache for key: ${key}, TTL: ${ttl}s`);
     try {
       // Set the cache entry
       const { error } = await this.supabaseClient
@@ -95,12 +98,12 @@ export class SupabaseCache implements CacheProvider {
         }, { onConflict: 'key' }); // Specify conflict target
       
       if (error) {
-        console.error('Cache set error:', error);
+        console.error('SupabaseCache.set: Error setting cache:', error);
       } else {
-        console.log(`Cache set for key: ${key}`);
+        console.log(`SupabaseCache.set: Cache set successfully for key: ${key}`);
       }
     } catch (error) {
-      console.error('Cache set error (exception):', error);
+      console.error('SupabaseCache.set: Exception during cache set:', error);
     }
   }
   
@@ -113,12 +116,12 @@ export class SupabaseCache implements CacheProvider {
         .eq('key', key);
       
       if (error) {
-        console.error('Cache delete error:', error);
+        console.error('SupabaseCache.delete: Error deleting cache:', error);
       } else {
-        console.log(`Cache deleted for key: ${key}`);
+        console.log(`SupabaseCache.delete: Cache deleted for key: ${key}`);
       }
     } catch (error) {
-      console.error('Cache delete error (exception):', error);
+      console.error('SupabaseCache.delete: Exception during cache delete:', error);
     }
   }
 }

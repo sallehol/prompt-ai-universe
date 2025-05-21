@@ -21,6 +21,7 @@ export interface MiddlewareContext {
   requestParams?: any;
   responseBody?: any; // To store parsed response body for logging
   errorDetails?: any; // To store error details for logging
+  explicitCachePreference?: boolean; // New: To handle explicit cache parameter
 }
 
 // Middleware interface
@@ -103,48 +104,58 @@ export class CachingMiddleware implements Middleware {
     const apiPathIndex = pathParts.findIndex(p => p === 'ai-proxy') + 1;
     const relevantPath = pathParts.slice(apiPathIndex); 
 
+    console.log(`CachingMiddleware.before: Path: ${relevantPath.join('/')}, Cacheable: ${this.isCacheable(relevantPath)}`);
+
     if (!this.isCacheable(relevantPath)) {
       return;
     }
 
-    // If ProviderDetectionMiddleware ran, context.requestParams is available
+    // Ensure requestParams is populated if not already done
+    if (!context.requestParams) {
+      try {
+        const clonedReq = req.clone();
+        const body = await clonedReq.json();
+        context.requestParams = body;
+      } catch (e) {
+        console.warn("CachingMiddleware.before: Could not parse request body as JSON.", e.message);
+        return; // Cannot proceed without params for caching logic
+      }
+    }
+    
+    const params = context.requestParams;
+
+    // Handle explicit cache parameter
+    if (params && params.cache !== undefined) {
+      context.explicitCachePreference = !!params.cache; // Convert to boolean
+      console.log(`CachingMiddleware.before: Explicit cache preference set to ${context.explicitCachePreference}.`);
+      // Important: Delete from params so it's not forwarded to the AI provider
+      delete params.cache; 
+      // Update context.requestParams if it was modified (it's a reference, so this might not be strictly needed but good for clarity)
+      context.requestParams = { ...params }; 
+    }
+
+    if (context.explicitCachePreference === false) {
+      console.log('CachingMiddleware.before: Caching explicitly disabled by request parameter.');
+      return; // Skip caching for this request
+    }
+    
     let isStreamingRequest = false;
-    if (context.requestParams && context.requestParams.stream === true) {
+    if (params && params.stream === true) {
         isStreamingRequest = true;
-    } else if (!context.requestParams) {
-        // Fallback: try to parse if not already parsed (should be rare if ProviderDetectionMiddleware is first)
-        try {
-            const clonedReq = req.clone();
-            const body = await clonedReq.json();
-            context.requestParams = body; // Store for other uses
-            if (body.stream === true) {
-                isStreamingRequest = true;
-            }
-        } catch (e) { /* ignore if not JSON or already parsed */ }
     }
     
     if (isStreamingRequest) {
-      console.log('CachingMiddleware: Skipping cache for streaming request.');
+      console.log('CachingMiddleware.before: Skipping cache for streaming request.');
       return; // Do not cache or serve from cache for streaming requests
     }
 
     try {
-      // context.requestParams should be populated by ProviderDetectionMiddleware if it ran first
-      if (!context.requestParams) {
-          // Fallback: if ProviderDetectionMiddleware didn't run or failed to parse
-          console.warn("CachingMiddleware: context.requestParams not set, attempting to parse body.");
-          const clonedReq = req.clone(); 
-          context.requestParams = await clonedReq.json();
-      }
-      const params = context.requestParams || (await req.clone().json()); // Ensure params is available
-
-      // Provider should be in context from ProviderDetectionMiddleware
-      // Fallback if not set, or if provider is part of cache key logic itself
       const providerForCache = context.provider || (params && params.provider) || 'unknown_provider_for_cache';
-      const endpoint = relevantPath.slice(1).join('/');
+      const endpoint = relevantPath.slice(1).join('/'); // e.g., text/completion
       
       const cacheKey = SupabaseCache.generateCacheKey(providerForCache as string, endpoint, params);
       context.cacheKey = cacheKey; // Store for after middleware
+      console.log(`CachingMiddleware.before: Cache check for key: ${cacheKey}`);
       
       const cachedResponse = await this.cache.get(cacheKey);
       if (cachedResponse) {
@@ -162,33 +173,56 @@ export class CachingMiddleware implements Middleware {
   }
   
   async after(_req: Request, res: Response, context: MiddlewareContext): Promise<Response | void> {
+    if (context.explicitCachePreference === false) {
+        console.log('CachingMiddleware.after: Caching explicitly disabled, not attempting to store.');
+        // Still need to return the original response, possibly with rate limit headers if RateLimitingMiddleware already processed it.
+        // If RateLimitingMiddleware runs *after* Caching, then simple 'return res' is fine.
+        // Assuming RateLimitingMiddleware runs after CachingMiddleware.after, this is tricky.
+        // For now, let's just pass it through. The X-Cache header won't be set.
+        return res; 
+    }
+
     if (!context.cacheKey || res.status !== 200 || res.headers.get('Content-Type')?.includes('text/event-stream')) {
+      if (res.status !== 200) console.log(`CachingMiddleware.after: Skipping cache set for non-200 status: ${res.status}`);
+      if (res.headers.get('Content-Type')?.includes('text/event-stream')) console.log('CachingMiddleware.after: Skipping cache set for event stream.');
+      if (!context.cacheKey) console.log('CachingMiddleware.after: Skipping cache set as no cacheKey in context.');
       return;
     }
     
     try {
-      if (!context.responseBody) {
-        // This part is tricky if res is a stream that was already consumed by the client.
-        // However, we should not reach here for streams due to the check above.
-        const clonedRes = res.clone();
-        context.responseBody = await clonedRes.json(); 
+      let bodyToCache;
+      const clonedRes = res.clone(); // Clone before any potential body consumption
+
+      // Attempt to parse as JSON first, then fall back to text
+      try {
+        bodyToCache = await clonedRes.json();
+      } catch (e) {
+        console.warn('CachingMiddleware.after: Failed to parse response as JSON for caching, trying as text.', e.message);
+        // Need to clone again if json() consumed the body
+        const textClonedRes = res.clone(); 
+        bodyToCache = await textClonedRes.text();
       }
-      await this.cache.set(context.cacheKey, context.responseBody);
+      
+      context.responseBody = bodyToCache; // Store for logging middleware
+      await this.cache.set(context.cacheKey, bodyToCache);
+      console.log(`CachingMiddleware.after: Cached response for key ${context.cacheKey}`);
       
       const newHeaders = new Headers(res.headers);
-      newHeaders.set('X-Cache', 'MISS');
+      newHeaders.set('X-Cache', 'MISS'); // It was a MISS, now it's cached. Future requests for this key will be HIT.
+      console.log('CachingMiddleware.after: Setting response headers:', Object.fromEntries(newHeaders.entries()));
       
-      return new Response(JSON.stringify(context.responseBody), {
+      // Return a new response with the original body and updated headers
+      // Ensure correct body type for new Response constructor
+      const finalBody = typeof bodyToCache === 'string' ? bodyToCache : JSON.stringify(bodyToCache);
+      
+      return new Response(finalBody, {
         status: res.status,
         statusText: res.statusText,
         headers: newHeaders
       });
 
     } catch (error) {
-      console.error('CachingMiddleware "after" error:', error.message);
-      // If error occurs (e.g. trying to clone/read an already used stream body),
-      // just return the original response without new headers to avoid breaking client.
-      // This might happen if a stream somehow bypasses the Content-Type check.
+      console.error('CachingMiddleware "after" error:', error.message, error.stack ? error.stack.split('\n')[0] : '');
       return res; 
     }
   }
