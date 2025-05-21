@@ -36,6 +36,7 @@ serve(async (req) => {
     if (functionNameIndex === -1) {
         return createErrorResponse(ErrorType.VALIDATION, 'Invalid path: ai-proxy segment not found.', 400);
     }
+    // apiPath will be like ["api", "models", "text", "completion"] or ["api", "image", "generation"]
     const apiPath = pathParts.slice(functionNameIndex + 1);
 
     if (apiPath.length < 1 || apiPath[0] !== 'api') {
@@ -46,7 +47,7 @@ serve(async (req) => {
       )
     }
     
-    const mainEndpointCategory = apiPath[1] // e.g. 'health', 'keys', 'models'
+    const mainEndpointCategory = apiPath[1] // e.g. 'health', 'keys', 'models', 'image', 'video', 'audio'
     
     switch (mainEndpointCategory) {
       case 'health':
@@ -82,10 +83,9 @@ serve(async (req) => {
             )
         }
       
-      case 'models':
+      case 'models': // This will now only handle text/chat models
         // Path structure: /api/models/{modelType}/{modelAction}
         // e.g., /api/models/text/completion  => apiPath = ["api", "models", "text", "completion"]
-        // apiPath[0]="api", apiPath[1]="models", apiPath[2]="text", apiPath[3]="completion"
         if (apiPath.length < 4) { 
           return createErrorResponse(
             ErrorType.VALIDATION,
@@ -94,64 +94,22 @@ serve(async (req) => {
           )
         }
         
-        const modelType = apiPath[2]       // "text", "chat", "image", "video", "audio"
-        const modelAction = apiPath[3]     // "completion", "generation", "edit", "variation", "speech", "transcription"
+        const modelType = apiPath[2]       // "text", "chat"
+        const modelAction = apiPath[3]     // "completion"
         
-        // Ensure POST for actions that modify or generate new data
-        // GET could be used for listing models or capabilities in future, but all current actions are POST-like
-        if (req.method !== 'POST' && 
-            !((modelType === 'image' && modelAction === 'edit') || // Edit/Variation might involve form data with POST
-              (modelType === 'image' && modelAction === 'variation') ||
-              (modelType === 'audio' && modelAction === 'transcription'))) {
-            // Allowing POST for all model actions initially for simplicity, but can be refined
-            // The above check is an example, simpler to just enforce POST for all data-changing ops
-        }
         if (req.method !== 'POST') {
-             // Specific checks for methods (e.g. image edit with FormData) are handled within the endpoint handlers
-             // For now, most model interactions will be POST.
+            return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         }
-
 
         switch (modelType) {
           case 'text':
             if (modelAction === 'completion') {
-              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
               return await handleTextCompletion(req);
             }
             break;
           case 'chat':
             if (modelAction === 'completion') {
-              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
               return await handleChatCompletion(req);
-            }
-            break;
-          case 'image':
-            if (modelAction === 'generation') {
-              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-              return await handleImageGeneration(req);
-            } else if (modelAction === 'edit') {
-              // FormData requests are POST
-              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-              return await handleImageEdit(req);
-            } else if (modelAction === 'variation') { // New endpoint for image variations
-              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-              return await handleImageVariation(req);
-            }
-            break;
-          case 'video':
-            if (modelAction === 'generation') {
-              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-              return await handleVideoGeneration(req);
-            }
-            break;
-          case 'audio':
-            if (modelAction === 'speech') { // Text-to-speech
-              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-              return await handleTextToSpeech(req);
-            } else if (modelAction === 'transcription') { // Speech-to-text
-              // FormData requests are POST
-              if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-              return await handleSpeechToText(req);
             }
             break;
         }
@@ -161,6 +119,69 @@ serve(async (req) => {
           `Model endpoint /${modelType}/${modelAction} not found or not supported.`,
           404
         );
+
+      case 'image':
+        // Path structure: /api/image/{action} e.g. /api/image/generation
+        if (apiPath.length < 3) { 
+          return createErrorResponse(
+            ErrorType.VALIDATION,
+            'Invalid image endpoint structure. Expected /api/image/{action}.',
+            400
+          );
+        }
+        const imageAction = apiPath[2]; // "generation", "edit", "variation"
+        if (req.method !== 'POST') {
+          return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
+        }
+        switch (imageAction) {
+          case 'generation':
+            return await handleImageGeneration(req);
+          case 'edit':
+            return await handleImageEdit(req);
+          case 'variation':
+            return await handleImageVariation(req);
+        }
+        return createErrorResponse(ErrorType.NOT_FOUND, `Image action '/${imageAction}' not found.`, 404);
+
+      case 'video':
+        // Path structure: /api/video/{action} e.g. /api/video/generation
+        if (apiPath.length < 3) {
+          return createErrorResponse(
+            ErrorType.VALIDATION,
+            'Invalid video endpoint structure. Expected /api/video/{action}.',
+            400
+          );
+        }
+        const videoAction = apiPath[2]; // "generation"
+        if (req.method !== 'POST') {
+          return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
+        }
+        switch (videoAction) {
+          case 'generation':
+            return await handleVideoGeneration(req);
+        }
+        return createErrorResponse(ErrorType.NOT_FOUND, `Video action '/${videoAction}' not found.`, 404);
+        
+      case 'audio':
+        // Path structure: /api/audio/{action} e.g. /api/audio/speech
+        if (apiPath.length < 3) {
+          return createErrorResponse(
+            ErrorType.VALIDATION,
+            'Invalid audio endpoint structure. Expected /api/audio/{action}.',
+            400
+          );
+        }
+        const audioAction = apiPath[2]; // "speech", "transcription"
+        if (req.method !== 'POST') {
+          return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
+        }
+        switch (audioAction) {
+          case 'speech': // Text-to-speech
+            return await handleTextToSpeech(req);
+          case 'transcription': // Speech-to-text
+            return await handleSpeechToText(req);
+        }
+        return createErrorResponse(ErrorType.NOT_FOUND, `Audio action '/${audioAction}' not found.`, 404);
       
       default:
         if (mainEndpointCategory) {
