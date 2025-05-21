@@ -35,15 +35,20 @@ export class BaseApiClient {
     return headers;
   }
 
-  // Overloads for the request method
-  protected async request<T_Response>(endpoint: string, method: string, body: any, isStreaming: true): Promise<ReadableStream<Uint8Array>>;
-  protected async request<T_Response>(endpoint: string, method: string, body?: any, isStreaming?: false): Promise<T_Response>;
+  // Improved overloads for the request method
+  protected async request<T_Response, S extends boolean = false>(
+    endpoint: string, 
+    method: string, 
+    body: any, 
+    isStreaming: S
+  ): Promise<S extends true ? ReadableStream<Uint8Array> : T_Response>;
+  
   // Implementation of the request method
-  protected async request<T_Response>(
+  protected async request<T_Response, S extends boolean = false>( // S generic here as per prompt for implementation
     endpoint: string,
     method: string,
     body?: any,
-    isStreaming: boolean = false
+    isStreaming: boolean = false // isStreaming parameter is 'boolean'
   ): Promise<T_Response | ReadableStream<Uint8Array>> {
     console.log(`[BaseApiClient] Requesting: ${method} ${this.baseUrl}${endpoint}`, body ? {body} : {});
     const headers = await this.getAuthHeaders();
@@ -90,11 +95,12 @@ export class BaseApiClient {
       if (error.name === 'AbortError') {
         throw normalizeApiError({ status: 0, message: 'The request timed out.', type: 'network' });
       }
-      if (error.status !== undefined && error.type !== undefined) {
+      // Re-throw ApiError instances directly
+      if (error.status !== undefined && error.type !== undefined && error.message !== undefined) {
         throw error;
       }
       console.error(`[BaseApiClient] Unknown error during request to ${endpoint}:`, error);
-      throw normalizeApiError(error);
+      throw normalizeApiError(error); // Normalize other errors
     }
   }
   

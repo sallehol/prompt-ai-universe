@@ -53,10 +53,12 @@ export const useSessionMessageOperations = ({
           error: { 
             type: errorDetails.type, 
             message: errorMessageContent,
-            ...(errorDetails.data?.provider && { provider: errorDetails.data.provider })
+            ...(errorDetails.data?.provider && { provider: errorDetails.data.provider }),
+            ...(errorDetails.data?.originalError && { originalError: errorDetails.data.originalError }) // Ensure originalError is preserved if present
           } 
         };
-        return { ...s, messages: [...s.messages, errorMessage] };
+        logger.log('[useSessionMessageOperations] Adding error message to session:', errorMessage, 'for sessionID:', sessionId);
+        return { ...s, messages: [...s.messages, errorMessage], lastActivityAt: Date.now() };
       }
       return s;
     }));
@@ -69,24 +71,37 @@ export const useSessionMessageOperations = ({
     if (!activeSession || activeSession.messages.length === 0) return null;
     
     let lastUserMessageContent: string | null = null;
+    let lastUserMessage: Message | null = null;
     
     for (let i = activeSession.messages.length - 1; i >= 0; i--) {
       const msg = activeSession.messages[i];
       if (msg.role === 'user') {
         const nextMsg = activeSession.messages[i+1];
         if (!nextMsg || (nextMsg.role === 'assistant' && nextMsg.status === 'error')) {
+          lastUserMessage = msg; // Store the whole message
           if(typeof msg.content === 'string') {
             lastUserMessageContent = msg.content;
           } else {
+            // For multi-modal content, find the first text block
             const textBlock = msg.content.find(block => block.type === 'text');
             if (textBlock) lastUserMessageContent = textBlock.content;
+            // If you need to handle image retries or other types, extend here
           }
-          break;
+          break; 
         }
       }
     }
     
-    return lastUserMessageContent;
+    // If we found a user message to retry, return its content and other necessary details
+    if (lastUserMessage && lastUserMessageContent !== null) {
+      return {
+        content: lastUserMessageContent, // The text content to be resent
+        fullMessage: lastUserMessage,   // The original Message object
+        modelId: activeSession.modelUsed // The model used in the session
+      };
+    }
+    
+    return null;
   }, [activeSessionId, persistedSessions]);
   
   const removeErrorMessages = useCallback(() => {
@@ -94,10 +109,15 @@ export const useSessionMessageOperations = ({
     
     updateAndPersistSessions(prevSessions => prevSessions.map(s => {
       if (s.id === activeSessionId) {
-        return {
-          ...s,
-          messages: s.messages.filter(msg => !(msg.role === 'assistant' && msg.status === 'error')),
-        };
+        const updatedMessages = s.messages.filter(msg => !(msg.role === 'assistant' && msg.status === 'error'));
+        if (updatedMessages.length < s.messages.length) {
+            logger.log(`[useSessionMessageOperations] Removing error messages from session ${s.id}`);
+            return {
+              ...s,
+              messages: updatedMessages,
+              lastActivityAt: Date.now(),
+            };
+        }
       }
       return s;
     }));
@@ -128,29 +148,42 @@ export const useSessionMessageOperations = ({
     }
     
     const messageIndex = currentSession.messages.findIndex(msg => msg.id === messageIdToRegenerate);
-    if (messageIndex === -1 || currentSession.messages[messageIndex].role !== 'assistant') {
-      logger.warn(`[useSessionMessageOperations] findMessageToRegenerate: AI message ${messageIdToRegenerate} not found or not AI.`);
+    
+    // Ensure the message to regenerate is an assistant message and not an error
+    if (messageIndex === -1 || currentSession.messages[messageIndex].role !== 'assistant' || currentSession.messages[messageIndex].status === 'error') {
+      logger.warn(`[useSessionMessageOperations] findMessageToRegenerate: AI message ${messageIdToRegenerate} not found, not AI, or is an error message.`);
       return null;
     }
 
     const userPromptMessageIndex = messageIndex - 1;
     if (userPromptMessageIndex < 0 || currentSession.messages[userPromptMessageIndex].role !== 'user') {
-      logger.warn(`[useSessionMessageOperations] findMessageToRegenerate: User prompt for ${messageIdToRegenerate} not found.`);
+      logger.warn(`[useSessionMessageOperations] findMessageToRegenerate: User prompt for AI message ${messageIdToRegenerate} not found at index ${userPromptMessageIndex}.`);
       return null;
     }
     
     const userPromptMsg = currentSession.messages[userPromptMessageIndex];
-    const userPromptText = typeof userPromptMsg.content === 'string' ? userPromptMsg.content : 
-                          (userPromptMsg.content[0] && userPromptMsg.content[0].type === 'text' ? userPromptMsg.content[0].content : '');
+    let userPromptContentForResend: Message['content'];
 
-    if (!userPromptText) {
-      logger.warn(`[useSessionMessageOperations] findMessageToRegenerate: User prompt content is empty.`);
+    // For regeneration, we need to pass the original structure of the user message's content
+    userPromptContentForResend = userPromptMsg.content;
+    
+    if (!userPromptContentForResend || (typeof userPromptContentForResend === 'string' && userPromptContentForResend.trim() === "") || (Array.isArray(userPromptContentForResend) && userPromptContentForResend.length === 0) ) {
+      logger.warn(`[useSessionMessageOperations] findMessageToRegenerate: User prompt content is empty or invalid.`);
       return null;
     }
     
+    // We need all messages up to (but not including) the user prompt that led to the AI message we are regenerating.
+    // No, we need messages up to and including the user prompt message.
+    // The AI message to regenerate and everything after it will be removed.
+    // So, the history for resend should be messages up to userPromptMessageIndex.
+    const historyForResend = currentSession.messages.slice(0, userPromptMessageIndex + 1);
+    
+    logger.log(`[useSessionMessageOperations] findMessageToRegenerate: Found user prompt for AI message ${messageIdToRegenerate}. User message index: ${userPromptMessageIndex}. Model: ${currentSession.modelUsed}. History length for resend: ${historyForResend.length}`);
+
     return { 
-      messageIndex,
-      userPromptText,
+      messageToRegenerateId: messageIdToRegenerate,
+      userPromptMessage: userPromptMsg, // Pass the full user message object
+      historyForResend, // Pass the relevant chat history
       modelId: currentSession.modelUsed
     };
   }, [activeSessionId, persistedSessions]);
@@ -160,9 +193,10 @@ export const useSessionMessageOperations = ({
     
     updateAndPersistSessions(prevSessions => prevSessions.map(s => {
       if (s.id === activeSessionId) {
+        logger.log(`[useSessionMessageOperations] Truncating session ${s.id} to message index ${messageIndex}`);
         return {
           ...s,
-          messages: s.messages.slice(0, messageIndex),
+          messages: s.messages.slice(0, messageIndex), // messageIndex is exclusive for slice, so it keeps up to messageIndex-1
           lastActivityAt: Date.now(),
         };
       }
