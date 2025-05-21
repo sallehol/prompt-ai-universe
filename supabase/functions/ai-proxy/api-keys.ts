@@ -3,7 +3,8 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, verifyAuth } from './auth.ts'
 import { createErrorResponse, ErrorType } from './error-utils.ts'
-import { ProviderName } from './providers.ts'
+// Updated import path below
+import { ProviderName } from './providers/index.ts'
 
 // List all available providers
 export async function listProviders(req: Request) {
@@ -202,3 +203,4 @@ export async function getApiKeyInternal(supabaseClient: SupabaseClient, userId: 
     return null
   }
 }
+

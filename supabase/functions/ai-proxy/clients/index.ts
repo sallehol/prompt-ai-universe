@@ -1,6 +1,6 @@
 
 // supabase/functions/ai-proxy/clients/index.ts
-import { ProviderName } from '../providers.ts';
+import { ProviderName } from '../providers/index.ts'; // Updated import path
 import { ProviderClient } from './provider-client.interface.ts';
 import { OpenAIClient } from './openai.client.ts';
 import { AnthropicClient } from './anthropic.client.ts';
