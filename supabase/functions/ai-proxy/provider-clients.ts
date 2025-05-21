@@ -17,7 +17,20 @@ class OpenAIClient implements ProviderClient {
   }
   
   async makeTextRequest(params: any): Promise<any> {
-    const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
+    // Final safety check - log what's actually being sent to the API
+    console.log(`OpenAIClient - Final payload for text request (/completions):`, JSON.stringify(params));
+    
+    const mutableParams = { ...params }; // Create a mutable copy
+    // Remove any cache parameter that might have slipped through
+    const cacheKeys = Object.keys(mutableParams).filter(key => key.toLowerCase() === 'cache');
+    if (cacheKeys.length > 0) {
+      for (const key of cacheKeys) {
+        delete mutableParams[key];
+      }
+      console.log(`OpenAIClient (makeTextRequest) - Removed unexpected cache parameter(s) at final stage: ${cacheKeys.join(', ')}`);
+    }
+    
+    const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = mutableParams;
     
     const bodyPayload: any = {
       model,
@@ -52,7 +65,20 @@ class OpenAIClient implements ProviderClient {
   }
   
   async makeChatRequest(params: any): Promise<any> {
-    const { model, messages, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
+    // Final safety check - log what's actually being sent to the API
+    console.log(`OpenAIClient - Final payload for chat request (/chat/completions):`, JSON.stringify(params));
+
+    const mutableParams = { ...params }; // Create a mutable copy
+    // Remove any cache parameter that might have slipped through
+    const cacheKeys = Object.keys(mutableParams).filter(key => key.toLowerCase() === 'cache');
+    if (cacheKeys.length > 0) {
+      for (const key of cacheKeys) {
+        delete mutableParams[key];
+      }
+      console.log(`OpenAIClient (makeChatRequest) - Removed unexpected cache parameter(s) at final stage: ${cacheKeys.join(', ')}`);
+    }
+        
+    const { model, messages, max_tokens = 1000, temperature = 0.7, stream, ...rest } = mutableParams;
     
     const bodyPayload: any = {
       model,
@@ -97,33 +123,48 @@ class AnthropicClient implements ProviderClient {
   }
   
   async makeTextRequest(params: any): Promise<any> {
-    // Anthropic doesn't support standalone text completion via the /v1/messages endpoint well,
-    // so we adapt it by forming a simple chat request.
-    // Streaming for this adapted text request will depend on makeChatRequest's streaming.
+    // This method adapts to makeChatRequest. Logging here shows params *before* adaptation.
+    // The crucial check will be in makeChatRequest.
+    console.log(`AnthropicClient - Initial params for makeTextRequest (will be adapted to chat):`, JSON.stringify(params));
+    
     const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
     
+    // Pass through all params, including potentially 'cache', to makeChatRequest
+    // makeChatRequest will handle the final sanitization.
     return this.makeChatRequest({
       model, 
       messages: [{ role: 'user', content: prompt }],
       max_tokens,
       temperature,
-      stream, // Pass stream parameter
-      ...rest
+      stream,
+      ...rest // This will carry over any other params, including 'cache' if present
     });
   }
   
   async makeChatRequest(params: any): Promise<any> {
-    const { model, messages, max_tokens = 1000, temperature = 0.7, system, stream, ...rest } = params;
+    // Final safety check - log what's actually being sent to the API
+    console.log(`AnthropicClient - Final payload for chat request (/messages):`, JSON.stringify(params));
+    
+    const mutableParams = { ...params }; // Create a mutable copy
+    const cacheKeys = Object.keys(mutableParams).filter(key => key.toLowerCase() === 'cache');
+    if (cacheKeys.length > 0) {
+      for (const key of cacheKeys) {
+        delete mutableParams[key];
+      }
+      console.log(`AnthropicClient (makeChatRequest) - Removed unexpected cache parameter(s) at final stage: ${cacheKeys.join(', ')}`);
+    }
+
+    const { model, messages, max_tokens = 1000, temperature = 0.7, system, stream, ...rest } = mutableParams;
     
     const requestBody: any = {
       model,
       messages: messages.map((m: { role: string; content: string }) => ({
-        role: m.role === 'user' ? 'user' : 'assistant',
+        role: m.role === 'user' ? 'user' : 'assistant', // Anthropic specific role mapping
         content: m.content
       })),
       max_tokens,
       temperature,
-      ...rest
+      ...rest // Spread rest of the sanitized params
     };
 
     if (system) {
@@ -150,15 +191,9 @@ class AnthropicClient implements ProviderClient {
     }
     
     if (stream) {
-      // For Anthropic, if we want to return an OpenAI-like SSE stream,
-      // we'd need a transformation stream here.
-      // For now, returning raw Anthropic stream. Client needs to handle its format.
-      // Or, if the goal is for the proxy to abstract this, this part needs more work.
-      // For this fix, let's assume if Anthropic is streamed, client handles Anthropic SSE.
-      return response; // Return full Response object
+      return response; 
     }
     
-    // Non-streaming: parse and transform to OpenAI-like format
     const result = await response.json();
     return {
       id: result.id,
@@ -194,12 +229,20 @@ class GoogleClient implements ProviderClient {
   }
   
   async makeTextRequest(params: any): Promise<any> {
-    const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
+    console.log(`GoogleClient - Final payload for text request (generateContent):`, JSON.stringify(params));
+
+    const mutableParams = { ...params };
+    const cacheKeys = Object.keys(mutableParams).filter(key => key.toLowerCase() === 'cache');
+    if (cacheKeys.length > 0) {
+      for (const key of cacheKeys) {
+        delete mutableParams[key];
+      }
+      console.log(`GoogleClient (makeTextRequest) - Removed unexpected cache parameter(s) at final stage: ${cacheKeys.join(', ')}`);
+    }
+
+    const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = mutableParams;
     const modelId = model.startsWith('google/') ? model.substring('google/'.length) : model;
 
-    // Google's REST API for generateContent doesn't support streaming in the same way OpenAI does.
-    // It has a separate streamGenerateContent method or specific SDK handling.
-    // For this fix, we'll assume non-streaming for Google text, or it would require a dedicated stream handler.
     if (stream) {
         console.warn("GoogleClient: makeTextRequest streaming not implemented in a way compatible with generic SSE processor. Falling back to non-streaming.");
     }
@@ -240,12 +283,23 @@ class GoogleClient implements ProviderClient {
           finish_reason: result.candidates[0].finishReason || 'stop'
         }
       ],
-      usage: { prompt_tokens: -1, completion_tokens: -1, total_tokens: -1 } // Placeholder
+      usage: { prompt_tokens: -1, completion_tokens: -1, total_tokens: -1 } 
     };
   }
   
   async makeChatRequest(params: any): Promise<any> {
-    const { model, messages, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
+    console.log(`GoogleClient - Final payload for chat request (generateContent):`, JSON.stringify(params));
+    
+    const mutableParams = { ...params };
+    const cacheKeys = Object.keys(mutableParams).filter(key => key.toLowerCase() === 'cache');
+    if (cacheKeys.length > 0) {
+      for (const key of cacheKeys) {
+        delete mutableParams[key];
+      }
+      console.log(`GoogleClient (makeChatRequest) - Removed unexpected cache parameter(s) at final stage: ${cacheKeys.join(', ')}`);
+    }
+
+    const { model, messages, max_tokens = 1000, temperature = 0.7, stream, ...rest } = mutableParams;
     const modelId = model.startsWith('google/') ? model.substring('google/'.length) : model;
 
     if (stream) {
@@ -253,7 +307,7 @@ class GoogleClient implements ProviderClient {
     }
 
     const contents = messages.map((msg: {role: string, content: string}) => ({
-      role: msg.role === 'assistant' ? 'model' : msg.role,
+      role: msg.role === 'assistant' ? 'model' : msg.role, // Google specific role mapping
       parts: [{ text: msg.content }]
     }));
     
@@ -295,7 +349,7 @@ class GoogleClient implements ProviderClient {
           finish_reason: result.candidates[0].finishReason || 'stop'
         }
       ],
-      usage: { prompt_tokens: -1, completion_tokens: -1, total_tokens: -1 } // Placeholder
+      usage: { prompt_tokens: -1, completion_tokens: -1, total_tokens: -1 }
     };
   }
 }
@@ -310,20 +364,35 @@ class MistralClient implements ProviderClient {
   }
   
   async makeTextRequest(params: any): Promise<any> {
+    // This method adapts to makeChatRequest. Logging here shows params *before* adaptation.
+    console.log(`MistralClient - Initial params for makeTextRequest (will be adapted to chat):`, JSON.stringify(params));
+    
     const { model, prompt, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
-    // Mistral text completions can be simulated via chat completions
+    
+    // Pass through all params, including potentially 'cache', to makeChatRequest
     return this.makeChatRequest({
       model,
       messages: [{ role: 'user', content: prompt }],
       max_tokens,
       temperature,
-      stream, // Pass stream parameter
-      ...rest
+      stream,
+      ...rest // This will carry over any other params
     });
   }
   
   async makeChatRequest(params: any): Promise<any> {
-    const { model, messages, max_tokens = 1000, temperature = 0.7, stream, ...rest } = params;
+    console.log(`MistralClient - Final payload for chat request (/chat/completions):`, JSON.stringify(params));
+
+    const mutableParams = { ...params };
+    const cacheKeys = Object.keys(mutableParams).filter(key => key.toLowerCase() === 'cache');
+    if (cacheKeys.length > 0) {
+      for (const key of cacheKeys) {
+        delete mutableParams[key];
+      }
+      console.log(`MistralClient (makeChatRequest) - Removed unexpected cache parameter(s) at final stage: ${cacheKeys.join(', ')}`);
+    }
+    
+    const { model, messages, max_tokens = 1000, temperature = 0.7, stream, ...rest } = mutableParams;
     
     const bodyPayload: any = {
       model,
@@ -352,7 +421,7 @@ class MistralClient implements ProviderClient {
     }
 
     if (stream) {
-      return response; // Return the full Response object for streaming
+      return response; 
     }
     return await response.json();
   }

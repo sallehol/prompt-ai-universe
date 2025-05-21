@@ -5,6 +5,30 @@ import { createErrorResponse, ErrorType, handleProviderError } from './error-uti
 import { getProviderFromModel, ProviderName } from './providers.ts'
 import { createProviderClient } from './provider-clients.ts'
 import { getApiKeyInternal } from './api-keys.ts'
+import { MiddlewareContext } from './middleware/index.ts'; // Ensure this import is correct
+
+// New sanitization function
+function sanitizeProviderParams(params: Record<string, any>, requestId?: string): Record<string, any> {
+  // Create a new object to avoid modifying the original
+  const sanitizedParams = { ...params };
+  
+  // Remove cache parameter in any case variation
+  const cacheKeys = Object.keys(sanitizedParams).filter(key => 
+    key.toLowerCase() === 'cache'
+  );
+  
+  if (cacheKeys.length > 0) {
+    for (const key of cacheKeys) {
+      delete sanitizedParams[key];
+    }
+    console.log(`[${requestId || 'NO_REQ_ID'}] FINAL SANITIZATION (text-models): Removed cache parameter(s) from provider payload. Original keys: ${cacheKeys.join(', ')}`);
+  }
+  
+  // Log the final payload for debugging
+  // console.log(`[${requestId || 'NO_REQ_ID'}] FINAL PAYLOAD to ${params.model} (text-models):`, JSON.stringify(sanitizedParams));
+  
+  return sanitizedParams;
+}
 
 // Helper function to process OpenAI-style SSE streams
 async function processOpenAIStream(response: Response): Promise<ReadableStream<Uint8Array>> {
@@ -38,20 +62,11 @@ async function processOpenAIStream(response: Response): Promise<ReadableStream<U
               }
               
               try {
-                // We don't strictly need to parse and re-stringify if we're just forwarding.
-                // Forwarding the raw line ensures maximum compatibility with what client expects.
-                // const jsonData = JSON.parse(jsonStr); 
-                // const processedData = JSON.stringify(jsonData) + '\n';
-                // controller.enqueue(encoder.encode(processedData));
                 controller.enqueue(encoder.encode(line + '\n'));
-
               } catch (e) {
                 console.error('Error parsing JSON from stream line:', jsonStr, e);
-                // Optionally forward the problematic line or an error event
-                // For now, log and skip.
               }
             } else if (line.trim()) {
-                // Forward other non-empty lines as well (e.g. ping events or comments if any)
                 controller.enqueue(encoder.encode(line + '\n'));
             }
           }
@@ -68,14 +83,25 @@ async function processOpenAIStream(response: Response): Promise<ReadableStream<U
 
 async function processModelRequest(
   req: Request,
-  requestType: 'text' | 'chat'
+  requestType: 'text' | 'chat',
+  context?: MiddlewareContext // Added context
 ) {
   let provider: ProviderName | undefined;
+  const requestId = context?.requestId || 'NO_REQ_ID_IN_PROCESS_MODEL_REQUEST';
+
   try {
-    const { user, supabaseClient } = await verifyAuth(req)
+    // If context is not passed, it implies an internal call or a path where auth might not have run.
+    // For direct calls (like from tests or older entry points not using middleware chain),
+    // we might need to re-verify auth or ensure context is always provided.
+    // For now, assuming verifyAuth handles req correctly if context is missing.
+    const { user, supabaseClient } = context?.user && context?.supabaseClient 
+      ? { user: context.user, supabaseClient: context.supabaseClient } 
+      : await verifyAuth(req);
     
-    const body = await req.json()
-    const { model, provider: explicitProvider, ...params } = body 
+    // Use context.requestParams if available and parsed by middleware, otherwise parse body.
+    // This avoids re-parsing if RequestOptimizationMiddleware has already done it.
+    const body = context?.requestParams || await req.json();
+    const { model, provider: explicitProvider, ...paramsFromRequest } = body;
     
     if (!model || typeof model !== 'string') {
       return createErrorResponse(ErrorType.VALIDATION, 'Model is required and must be a string.', 400)
@@ -101,15 +127,21 @@ async function processModelRequest(
     const client = createProviderClient(provider, apiKey)
     
     let resultFromClient: any;
+    let finalParamsForProvider: Record<string, any>;
 
     if (requestType === 'text') {
-      const { prompt, ...restParams } = params;
+      const { prompt, ...restParams } = paramsFromRequest;
       if (!prompt || typeof prompt !== 'string') {
         return createErrorResponse(ErrorType.VALIDATION, 'Prompt is required for text completion and must be a string.', 400)
       }
-      resultFromClient = await client.makeTextRequest({ model, prompt, ...restParams, stream: params.stream })
+      // Sanitize parameters before sending to provider
+      finalParamsForProvider = sanitizeProviderParams({ model, prompt, ...restParams, stream: paramsFromRequest.stream }, requestId);
+      
+      console.log(`[${requestId}] Sending text completion request to ${provider} via text-models.ts. Payload:`, JSON.stringify(finalParamsForProvider));
+      resultFromClient = await client.makeTextRequest(finalParamsForProvider);
+
     } else { // chat
-      const { messages, ...restParams } = params;
+      const { messages, ...restParams } = paramsFromRequest;
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
         return createErrorResponse(ErrorType.VALIDATION, 'Messages are required for chat completion and must be a non-empty array.', 400)
       }
@@ -118,19 +150,20 @@ async function processModelRequest(
           return createErrorResponse(ErrorType.VALIDATION, 'Each message must be an object with "role" and "content" string properties.', 400);
         }
       }
-      resultFromClient = await client.makeChatRequest({ model, messages, ...restParams, stream: params.stream })
+      // Sanitize parameters before sending to provider
+      finalParamsForProvider = sanitizeProviderParams({ model, messages, ...restParams, stream: paramsFromRequest.stream }, requestId);
+
+      console.log(`[${requestId}] Sending chat completion request to ${provider} via text-models.ts. Payload:`, JSON.stringify(finalParamsForProvider));
+      resultFromClient = await client.makeChatRequest(finalParamsForProvider);
     }
     
     // TODO: Log usage (to be implemented, especially complex for streams)
 
-    if (params.stream && resultFromClient instanceof Response) {
+    if (finalParamsForProvider.stream && resultFromClient instanceof Response) {
       const providerResponse = resultFromClient; // It's the full Response object from the provider
       if (!providerResponse.ok) {
-          // Errors from providers should ideally be caught within the provider client itself.
-          // If an error response is streamed, it's tricky. Assume error responses are not streamed or are handled by client.
           const errorText = await providerResponse.text().catch(() => `Provider request failed with status ${providerResponse.status}`);
-          console.error(`Streaming provider error for ${provider} (${providerResponse.status}): ${errorText}`);
-          // Try to parse as JSON, otherwise return text
+          console.error(`[${requestId}] Streaming provider error for ${provider} (${providerResponse.status}): ${errorText}`);
           try {
             const errorJson = JSON.parse(errorText);
             return handleProviderError(errorJson.error || errorJson , provider as ProviderName);
@@ -139,31 +172,25 @@ async function processModelRequest(
           }
       }
 
-      // Use processOpenAIStream if the provider is OpenAI or Mistral (which mimics OpenAI SSE)
-      // For Anthropic, if its client returns a raw stream, it might need its own processor or client-side handling.
-      // For now, assume processOpenAIStream is suitable for OpenAI/Mistral.
-      if (provider === ProviderName.OPENAI || provider === ProviderName.MISTRAL || (provider === ProviderName.ANTHROPIC && params.stream)) { // Crude check for Anthropic stream
+      if (provider === ProviderName.OPENAI || provider === ProviderName.MISTRAL || (provider === ProviderName.ANTHROPIC && finalParamsForProvider.stream)) {
         const processedStream = await processOpenAIStream(providerResponse);
         return new Response(
           processedStream,
           { headers: { 
               ...corsHeaders, 
               'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache', // Important for streams
-              'Connection': 'keep-alive'    // Important for streams
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive'
             } 
           }
         );
       } else {
-        // For other providers or if processOpenAIStream is not suitable, pass raw body.
-        // This branch might be hit if AnthropicClient returns a stream not intended for processOpenAIStream.
-        // Or if a new provider is added.
-        console.warn(`Provider ${provider} is streaming but not explicitly handled by SSE processor. Passing raw stream.`);
+        console.warn(`[${requestId}] Provider ${provider} is streaming but not explicitly handled by SSE processor. Passing raw stream.`);
         return new Response(
-          providerResponse.body, // Pass the raw stream body
+          providerResponse.body,
           { headers: { 
               ...corsHeaders, 
-              'Content-Type': 'text/event-stream', // Assuming it's SSE
+              'Content-Type': 'text/event-stream', 
               'Cache-Control': 'no-cache',
               'Connection': 'keep-alive'
             } 
@@ -179,7 +206,7 @@ async function processModelRequest(
     }
 
   } catch (error) {
-    console.error(`Error handling ${requestType} completion (provider: ${provider}):`, error.message, error.stack);
+    console.error(`[${requestId}] Error handling ${requestType} completion (provider: ${provider}):`, error.message, error.stack);
     
     if (error.message === 'Unauthorized') {
       return createErrorResponse(ErrorType.AUTHENTICATION, 'Unauthorized', 401)
@@ -193,10 +220,10 @@ async function processModelRequest(
   }
 }
 
-export async function handleTextCompletion(req: Request) {
-  return processModelRequest(req, 'text');
+export async function handleTextCompletion(req: Request, context?: MiddlewareContext) {
+  return processModelRequest(req, 'text', context);
 }
 
-export async function handleChatCompletion(req: Request) {
-  return processModelRequest(req, 'chat');
+export async function handleChatCompletion(req: Request, context?: MiddlewareContext) {
+  return processModelRequest(req, 'chat', context);
 }
