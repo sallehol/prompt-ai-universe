@@ -1,4 +1,3 @@
-
 // supabase/functions/ai-proxy/rate-limit.ts
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -24,7 +23,7 @@ export class SupabaseRateLimiter implements RateLimiter {
     try {
       const { data, error } = await this.supabaseClient
         .from(this.configTableName)
-        .select('"limit", "window"') // Ensure "limit" and "window" are quoted
+        .select('rate_limit, "window"') // Changed from '"limit", "window"'
         .eq('provider', provider)
         .single();
       
@@ -33,16 +32,16 @@ export class SupabaseRateLimiter implements RateLimiter {
         
         const { data: defaultConfig, error: defaultError } = await this.supabaseClient
             .from(this.configTableName)
-            .select('"limit", "window"')
+            .select('rate_limit, "window"') // Changed from '"limit", "window"'
             .eq('provider', 'default')
             .single();
         if (defaultError || !defaultConfig) {
             if(defaultError && defaultError.code !== 'PGRST116') console.error('Error getting default rate limit config:', defaultError.message);
             return defaultLimits;
         }
-        return { limit: defaultConfig.limit, window: defaultConfig.window };
+        return { limit: defaultConfig.rate_limit, window: defaultConfig.window }; // Changed from defaultConfig.limit
       }
-      return { limit: data.limit, window: data.window };
+      return { limit: data.rate_limit, window: data.window }; // Changed from data.limit
     } catch (error) {
       console.error('Exception getting rate limit config:', error);
       return defaultLimits;
@@ -79,7 +78,7 @@ export class SupabaseRateLimiter implements RateLimiter {
       }
 
       // Window is active, check usage
-      const remaining = config.limit - data.usage;
+      const remaining = config.limit - data.usage; // This uses config.limit, which is correctly populated by getLimitConfig
       const allowed = remaining > 0;
       
       return { allowed, remaining, reset: data.last_reset + config.window, limit: config.limit };

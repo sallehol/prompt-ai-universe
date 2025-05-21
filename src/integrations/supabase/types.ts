@@ -13,24 +13,24 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          limit: number
           provider: string
+          rate_limit: number
           updated_at: string
           window: number
         }
         Insert: {
           created_at?: string
           id?: string
-          limit: number
           provider: string
+          rate_limit: number
           updated_at?: string
           window: number
         }
         Update: {
           created_at?: string
           id?: string
-          limit?: number
           provider?: string
+          rate_limit?: number
           updated_at?: string
           window?: number
         }
