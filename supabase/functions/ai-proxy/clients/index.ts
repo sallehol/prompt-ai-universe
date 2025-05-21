@@ -1,13 +1,13 @@
 
 // supabase/functions/ai-proxy/clients/index.ts
-import { ProviderName } from '../providers/index.ts'; // Updated import path
+import { ProviderName } from '../providers/index.ts';
 import { ProviderClient } from './provider-client.interface.ts';
 import { OpenAIClient } from './openai.client.ts';
 import { AnthropicClient } from './anthropic.client.ts';
 import { GoogleClient } from './google.client.ts';
 import { MistralClient } from './mistral.client.ts';
 
-export { ProviderClient } from './provider-client.interface.ts';
+export type { ProviderClient }; // Changed re-export to use 'export type'
 
 // Factory function to create provider clients
 export function createProviderClient(provider: ProviderName, apiKey: string): ProviderClient {
