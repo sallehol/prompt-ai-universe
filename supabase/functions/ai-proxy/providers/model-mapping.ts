@@ -1,40 +1,5 @@
-// supabase/functions/ai-proxy/providers.ts
-
-// Define provider types
-export enum ProviderType {
-  TEXT = 'text',
-  CHAT = 'chat',
-  IMAGE = 'image',
-  VIDEO = 'video',
-  AUDIO = 'audio',
-  CODE = 'code',
-}
-
-// Define provider names
-export enum ProviderName {
-  OPENAI = 'openai',
-  ANTHROPIC = 'anthropic',
-  GOOGLE = 'google',
-  MISTRAL = 'mistral',
-  META = 'meta',
-  COHERE = 'cohere',
-  DEEPSEEK = 'deepseek',
-  MIDJOURNEY = 'midjourney',
-  STABILITY = 'stability',
-  RUNWAY = 'runway',
-  PIKA = 'pika',
-  HEYGEN = 'heygen',
-  DID = 'did',
-  ELEVENLABS = 'elevenlabs',
-  ASSEMBLYAI = 'assemblyai',
-  DEEPGRAM = 'deepgram',
-  HUGGINGFACE = 'huggingface',
-  ORIGINALITY = 'originality',
-  TAVUS = 'tavus',
-  CODEIUM = 'codeium',
-  TABNINE = 'tabnine',
-  GETTY = 'getty',
-}
+// supabase/functions/ai-proxy/providers/model-mapping.ts
+import { ProviderName } from './types.ts';
 
 // Map model names to providers
 export function getProviderFromModel(model: string, explicitProvider?: string): ProviderName {
@@ -219,58 +184,4 @@ export function getProviderFromModel(model: string, explicitProvider?: string): 
   console.warn(`Unknown provider for model: ${model}. Consider specifying provider explicitly or check model name.`);
   // Instead of defaulting to OpenAI, throw an error
   throw new Error(`Unknown provider for model: "${model}". Please specify provider explicitly or ensure the model name is registered.`);
-}
-
-// Get provider capabilities
-export function getProviderCapabilities(provider: ProviderName): ProviderType[] {
-  switch (provider) {
-    case ProviderName.OPENAI:
-      return [ProviderType.TEXT, ProviderType.CHAT, ProviderType.IMAGE, ProviderType.AUDIO, ProviderType.CODE]
-    case ProviderName.ANTHROPIC:
-      return [ProviderType.CHAT]
-    case ProviderName.GOOGLE:
-      return [ProviderType.TEXT, ProviderType.CHAT, ProviderType.IMAGE]
-    case ProviderName.MISTRAL:
-      return [ProviderType.TEXT, ProviderType.CHAT, ProviderType.CODE]
-    case ProviderName.META:
-      return [ProviderType.TEXT, ProviderType.CHAT]
-    case ProviderName.COHERE:
-      return [ProviderType.TEXT, ProviderType.CHAT]
-    case ProviderName.DEEPSEEK:
-      return [ProviderType.TEXT, ProviderType.CHAT, ProviderType.CODE]
-    case ProviderName.MIDJOURNEY:
-      return [ProviderType.IMAGE]
-    case ProviderName.STABILITY:
-      return [ProviderType.IMAGE]
-    case ProviderName.RUNWAY:
-      return [ProviderType.VIDEO]
-    case ProviderName.PIKA:
-      return [ProviderType.VIDEO]
-    case ProviderName.HEYGEN:
-      return [ProviderType.VIDEO]
-    case ProviderName.DID:
-      return [ProviderType.VIDEO]
-    case ProviderName.ELEVENLABS:
-      return [ProviderType.AUDIO]
-    case ProviderName.ASSEMBLYAI:
-      return [ProviderType.AUDIO]
-    case ProviderName.DEEPGRAM:
-      return [ProviderType.AUDIO]
-    case ProviderName.HUGGINGFACE:
-      return [ProviderType.TEXT, ProviderType.CHAT, ProviderType.IMAGE, ProviderType.AUDIO, ProviderType.CODE]
-    case ProviderName.ORIGINALITY:
-      return [ProviderType.TEXT]
-    case ProviderName.TAVUS:
-      return [ProviderType.VIDEO]
-    case ProviderName.CODEIUM:
-      return [ProviderType.CODE]
-    case ProviderName.TABNINE:
-      return [ProviderType.CODE]
-    case ProviderName.GETTY:
-      return [ProviderType.IMAGE]
-    default:
-      // Ensure all enum members are handled, or provide a safe default
-      const _exhaustiveCheck: never = provider;
-      return []
-  }
 }

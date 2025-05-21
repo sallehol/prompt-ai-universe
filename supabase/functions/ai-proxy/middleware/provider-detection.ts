@@ -1,7 +1,6 @@
-
 // supabase/functions/ai-proxy/middleware/provider-detection.ts
 import { Middleware, MiddlewareContext } from './index.ts';
-import { getProviderFromModel, ProviderName } from '../providers.ts';
+import { getProviderFromModel, ProviderName } from '../providers/index.ts';
 
 export class ProviderDetectionMiddleware implements Middleware {
   async before(req: Request, context: MiddlewareContext): Promise<void> {

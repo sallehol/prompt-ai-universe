@@ -1,7 +1,6 @@
-
 // supabase/functions/ai-proxy/core/model-request-processor.ts
 import { createErrorResponse, ErrorType, handleProviderError } from '../error-utils.ts'
-import { ProviderName } from '../providers.ts'
+import { ProviderName } from '../providers/index.ts' // Updated import
 import { MiddlewareContext } from '../middleware/index.ts';
 import { validateRequest } from './request-validator.ts';
 import { executeProviderRequest } from './provider-executor.ts';

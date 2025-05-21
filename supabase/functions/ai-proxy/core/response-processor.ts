@@ -1,7 +1,6 @@
-
 import { corsHeaders } from '../auth.ts'
 import { createErrorResponse, ErrorType, handleProviderError } from '../error-utils.ts'
-import { ProviderName } from '../providers.ts'
+import { ProviderName } from '../providers/index.ts'
 import { processOpenAIStream } from '../utils/text-model-utils.ts';
 
 export async function processProviderResponse(

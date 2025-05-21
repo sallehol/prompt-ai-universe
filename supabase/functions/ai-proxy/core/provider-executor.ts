@@ -1,7 +1,6 @@
-
 import { SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
 import { createErrorResponse, ErrorType } from '../error-utils.ts'
-import { ProviderName } from '../providers.ts'
+import { ProviderName } from '../providers/index.ts' // Updated import
 import { createProviderClient } from '../clients/index.ts'; 
 import { getApiKeyInternal } from '../api-keys.ts'
 import { sanitizeProviderParams } from '../utils/text-model-utils.ts';
