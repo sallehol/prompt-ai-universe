@@ -92,7 +92,6 @@ export const useSessionMessageOperations = ({
       }
     }
     
-    // If we found a user message to retry, return its content and other necessary details
     if (lastUserMessage && lastUserMessageContent !== null) {
       return {
         content: lastUserMessageContent, // The text content to be resent
@@ -149,7 +148,6 @@ export const useSessionMessageOperations = ({
     
     const messageIndex = currentSession.messages.findIndex(msg => msg.id === messageIdToRegenerate);
     
-    // Ensure the message to regenerate is an assistant message and not an error
     if (messageIndex === -1 || currentSession.messages[messageIndex].role !== 'assistant' || currentSession.messages[messageIndex].status === 'error') {
       logger.warn(`[useSessionMessageOperations] findMessageToRegenerate: AI message ${messageIdToRegenerate} not found, not AI, or is an error message.`);
       return null;
@@ -164,7 +162,6 @@ export const useSessionMessageOperations = ({
     const userPromptMsg = currentSession.messages[userPromptMessageIndex];
     let userPromptContentForResend: Message['content'];
 
-    // For regeneration, we need to pass the original structure of the user message's content
     userPromptContentForResend = userPromptMsg.content;
     
     if (!userPromptContentForResend || (typeof userPromptContentForResend === 'string' && userPromptContentForResend.trim() === "") || (Array.isArray(userPromptContentForResend) && userPromptContentForResend.length === 0) ) {
@@ -172,19 +169,16 @@ export const useSessionMessageOperations = ({
       return null;
     }
     
-    // We need all messages up to (but not including) the user prompt that led to the AI message we are regenerating.
-    // No, we need messages up to and including the user prompt message.
-    // The AI message to regenerate and everything after it will be removed.
-    // So, the history for resend should be messages up to userPromptMessageIndex.
     const historyForResend = currentSession.messages.slice(0, userPromptMessageIndex + 1);
     
     logger.log(`[useSessionMessageOperations] findMessageToRegenerate: Found user prompt for AI message ${messageIdToRegenerate}. User message index: ${userPromptMessageIndex}. Model: ${currentSession.modelUsed}. History length for resend: ${historyForResend.length}`);
 
     return { 
       messageToRegenerateId: messageIdToRegenerate,
-      userPromptMessage: userPromptMsg, // Pass the full user message object
-      historyForResend, // Pass the relevant chat history
-      modelId: currentSession.modelUsed
+      userPromptMessage: userPromptMsg,
+      historyForResend,
+      modelId: currentSession.modelUsed,
+      messageIndexOfAiResponse: messageIndex
     };
   }, [activeSessionId, persistedSessions]);
   

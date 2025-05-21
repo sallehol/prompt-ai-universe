@@ -82,15 +82,15 @@ export const useMessageManager = ({
   ]);
 
   const retryLastMessage = useCallback(() => {
-    const userMessageContent = findLastUserMessageToRetry();
+    const userMessageData = findLastUserMessageToRetry();
       
-    if (userMessageContent) {
-      logger.log(`[useMessageManager] Retrying last user message: "${userMessageContent.substring(0,30)}..."`);
+    if (userMessageData && userMessageData.content) { // Check userMessageData.content
+      logger.log(`[useMessageManager] Retrying last user message: "${userMessageData.content.substring(0,30)}..."`); // Use .content
       resetErrorState();
       removeErrorMessages();
-      handleSendMessage(userMessageContent);
+      handleSendMessage(userMessageData.content); // Pass .content
     } else {
-      logger.warn('[useMessageManager] retryLastMessage: No suitable user message found to retry.');
+      logger.warn('[useMessageManager] retryLastMessage: No suitable user message found to retry or content is missing.');
     }
   }, [findLastUserMessageToRetry, resetErrorState, removeErrorMessages, handleSendMessage]);
 
@@ -98,14 +98,30 @@ export const useMessageManager = ({
     const messageData = findMessageToRegenerate(messageIdToRegenerate);
     if (!messageData || !activeSessionId) return;
     
-    const { messageIndex, userPromptText, modelId } = messageData;
+    // Destructure based on the updated findMessageToRegenerate return type
+    const { userPromptMessage, modelId, messageIndexOfAiResponse } = messageData; 
+    
+    let userPromptText = "";
+    if (typeof userPromptMessage.content === 'string') {
+      userPromptText = userPromptMessage.content;
+    } else if (Array.isArray(userPromptMessage.content) && userPromptMessage.content.length > 0 && userPromptMessage.content[0].type === 'text') {
+      userPromptText = userPromptMessage.content[0].content;
+    }
+    
     const modelConfig = getModelConfig(modelId);
     
     logger.log(`[useMessageManager] regenerateResponse: For prompt "${userPromptText.substring(0,30)}..." using model ${modelConfig.displayName} (${modelConfig.provider})`);
-    truncateSessionToMessage(messageIndex);
+    
+    // Use messageIndexOfAiResponse for truncation
+    truncateSessionToMessage(messageIndexOfAiResponse); 
     resetErrorState();
     
-    // Simulate regeneration
+    // Simulate regeneration (Original logic)
+    // In a real scenario, you would call sendMessageToAi here with userPromptMessage and history
+    // For example:
+    // const result = await sendMessageToAi(messageData.historyForResend, modelId);
+    // if (result.success && result.message) { ... } else if ...
+    
     setTimeout(() => {
       const regeneratedResponseText = `(Regenerated) New response from ${modelConfig.displayName} to: "${userPromptText}"`;
       const regeneratedMsg = createNewMessage(regeneratedResponseText, 'assistant');
@@ -119,6 +135,7 @@ export const useMessageManager = ({
     truncateSessionToMessage,
     resetErrorState,
     addMessageToSession
+    // sendMessageToAi // Would be needed for real regeneration
   ]);
 
   return {
@@ -131,3 +148,4 @@ export const useMessageManager = ({
     retryLastMessage,
   };
 };
+

@@ -5,3 +5,4 @@ export interface ApiError {
   status: number; // HTTP status code, or 0 for client-side/network errors
   data?: any;    // Additional error details, e.g., provider name, error codes
 }
+

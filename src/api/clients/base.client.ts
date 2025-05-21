@@ -35,20 +35,12 @@ export class BaseApiClient {
     return headers;
   }
 
-  // Improved overloads for the request method
-  protected async request<T_Response, S extends boolean = false>(
-    endpoint: string, 
-    method: string, 
-    body: any, 
-    isStreaming: S
-  ): Promise<S extends true ? ReadableStream<Uint8Array> : T_Response>;
-  
-  // Implementation of the request method
-  protected async request<T_Response, S extends boolean = false>( // S generic here as per prompt for implementation
+  // Simplified request method without overloads
+  protected async request<T_Response>(
     endpoint: string,
     method: string,
     body?: any,
-    isStreaming: boolean = false // isStreaming parameter is 'boolean'
+    isStreaming: boolean = false
   ): Promise<T_Response | ReadableStream<Uint8Array>> {
     console.log(`[BaseApiClient] Requesting: ${method} ${this.baseUrl}${endpoint}`, body ? {body} : {});
     const headers = await this.getAuthHeaders();
