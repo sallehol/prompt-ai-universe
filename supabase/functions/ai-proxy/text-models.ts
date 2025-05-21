@@ -3,26 +3,30 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, verifyAuth } from './auth.ts'
 import { createErrorResponse, ErrorType, handleProviderError } from './error-utils.ts'
-import { getProviderFromModel, ProviderName } from './providers.ts' // Removed ProviderType as it's not used here
+import { getProviderFromModel, ProviderName } from './providers.ts'
 import { createProviderClient } from './provider-clients.ts'
-import { getApiKeyInternal } from './api-keys.ts' // Changed from getApiKey to getApiKeyInternal
+import { getApiKeyInternal } from './api-keys.ts'
 
 async function processModelRequest(
   req: Request,
   requestType: 'text' | 'chat'
 ) {
-  let provider: ProviderName | undefined; // To be used in catch block
+  let provider: ProviderName | undefined;
   try {
     const { user, supabaseClient } = await verifyAuth(req)
     
     const body = await req.json()
-    const { model, ...params } = body
+    const { model, provider: explicitProvider, ...params } = body // Extract explicitProvider
     
     if (!model || typeof model !== 'string') {
       return createErrorResponse(ErrorType.VALIDATION, 'Model is required and must be a string.', 400)
     }
     
-    provider = getProviderFromModel(model) // Assign provider here
+    try {
+        provider = getProviderFromModel(model, explicitProvider as string | undefined);
+    } catch (error) {
+        return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
+    }
     
     const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider)
     
@@ -49,7 +53,6 @@ async function processModelRequest(
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
         return createErrorResponse(ErrorType.VALIDATION, 'Messages are required for chat completion and must be a non-empty array.', 400)
       }
-      // Basic validation for message structure
       for (const msg of messages) {
         if (typeof msg !== 'object' || !msg.role || !msg.content || typeof msg.role !== 'string' || typeof msg.content !== 'string') {
           return createErrorResponse(ErrorType.VALIDATION, 'Each message must be an object with "role" and "content" string properties.', 400);
@@ -65,18 +68,16 @@ async function processModelRequest(
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
-    console.error(`Error handling ${requestType} completion:`, error.message, error.stack);
+    console.error(`Error handling ${requestType} completion (provider: ${provider}):`, error.message, error.stack);
     
-    if (error.message === 'Unauthorized') { // From verifyAuth
+    if (error.message === 'Unauthorized') {
       return createErrorResponse(ErrorType.AUTHENTICATION, 'Unauthorized', 401)
     }
     
-    // If provider is known (error happened after provider determination), use handleProviderError
     if (provider) {
       return handleProviderError(error, provider)
     }
     
-    // Generic server error
     return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500)
   }
 }

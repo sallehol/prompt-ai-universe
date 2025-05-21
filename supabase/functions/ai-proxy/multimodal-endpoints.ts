@@ -3,8 +3,8 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, verifyAuth } from './auth.ts'
 import { createErrorResponse, ErrorType, handleProviderError } from './error-utils.ts'
-import { getProviderFromModel, ProviderName } from './providers.ts' // Removed ProviderType as it's not directly used
-import { getApiKeyInternal } from './api-keys.ts' // Use getApiKeyInternal
+import { getProviderFromModel, ProviderName } from './providers.ts'
+import { getApiKeyInternal } from './api-keys.ts'
 import { createImageProviderClient } from './image-clients.ts'
 import { createVideoProviderClient } from './video-clients.ts'
 import { createAudioProviderClient } from './audio-clients.ts'
@@ -30,12 +30,17 @@ export async function handleImageGeneration(req: Request) {
   let provider: ProviderName | undefined;
   try {
     const { user, supabaseClient } = await verifyAuth(req)
-    const { model, prompt, ...params } = await req.json()
+    const { model, prompt, provider: explicitProvider, ...params } = await req.json()
     
     if (!model || typeof model !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Model is required and must be a string.', 400)
     if (!prompt || typeof prompt !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Prompt is required and must be a string.', 400)
     
-    provider = getProviderFromModel(model);
+    try {
+        provider = getProviderFromModel(model, explicitProvider as string | undefined);
+    } catch (error) {
+        return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
+    }
+
     const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
     if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
     
@@ -55,27 +60,32 @@ export async function handleImageGeneration(req: Request) {
 export async function handleImageEdit(req: Request) {
   let provider: ProviderName | undefined;
   try {
-    const { user, supabaseClient } = await verifyAuth(req); // Auth before parsing form data
+    const { user, supabaseClient } = await verifyAuth(req);
     const formData = await req.formData();
     
     const model = formData.get('model') as string;
     const prompt = formData.get('prompt') as string;
-    const image = formData.get('image') as File; // File object
-    const mask = formData.get('mask') as File | null; // Mask is optional
+    const image = formData.get('image') as File;
+    const mask = formData.get('mask') as File | null;
+    const explicitProvider = formData.get('provider') as string | undefined;
 
     if (!model || typeof model !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Model (form field) is required and must be a string.', 400);
     if (!prompt || typeof prompt !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Prompt (form field) is required.', 400);
     if (!image) return createErrorResponse(ErrorType.VALIDATION, 'Image (form field) is required.', 400);
 
-    provider = getProviderFromModel(model);
+    try {
+        provider = getProviderFromModel(model, explicitProvider);
+    } catch (error) {
+        return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
+    }
+
     const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
     if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
 
     const client = createImageProviderClient(provider, apiKey);
     if (!client.editImage) return createErrorResponse(ErrorType.VALIDATION, `Provider ${provider} does not support image editing.`, 400, provider);
 
-    // Extract other parameters from formData if any
-    const otherParams = await extractOtherParamsFromFormData(formData, ['model', 'prompt', 'image', 'mask']);
+    const otherParams = await extractOtherParamsFromFormData(formData, ['model', 'prompt', 'image', 'mask', 'provider']);
 
     const responsePayload = await client.editImage({ model, prompt, image, mask, ...otherParams });
     
@@ -88,22 +98,34 @@ export async function handleImageEdit(req: Request) {
   }
 }
 
-// Handle image variation requests (New based on OpenAI client capability)
+// Handle image variation requests
 export async function handleImageVariation(req: Request) {
   let provider: ProviderName | undefined;
   try {
     const { user, supabaseClient } = await verifyAuth(req);
     const formData = await req.formData();
 
-    const model = formData.get('model') as string; // Model might determine which OpenAI variation capability if extended
+    const model = formData.get('model') as string;
     const image = formData.get('image') as File;
+    const explicitProvider = formData.get('provider') as string | undefined;
 
-    if (!model || typeof model !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Model (form field) is required for variations (e.g., to indicate DALL-E version).', 400);
+
+    if (!model || typeof model !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Model (form field) is required.', 400);
     if (!image) return createErrorResponse(ErrorType.VALIDATION, 'Image (form field) is required for variations.', 400);
+    
+    try {
+        // For variations, OpenAI is often implied if no explicit provider, but good to allow override
+        provider = getProviderFromModel(model, explicitProvider || ProviderName.OPENAI); 
+    } catch (error) {
+         // If explicitProvider was OpenAI and model wasn't OpenAI, this error might be confusing.
+         // However, getProviderFromModel should handle it.
+        return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
+    }
 
-    provider = getProviderFromModel(model); // Mainly for OpenAI here
-    if (provider !== ProviderName.OPENAI) { // Currently only OpenAI client has createVariation
-        return createErrorResponse(ErrorType.VALIDATION, `Provider ${provider} does not support image variations through this endpoint.`, 400, provider);
+    if (provider !== ProviderName.OPENAI && !explicitProvider) { 
+        // Defaulting to OpenAI if no explicit provider and model doesn't scream OpenAI can be risky.
+        // However, if `getProviderFromModel` correctly identified it as something else, this check is redundant.
+        // The main check is `client.createVariation`.
     }
 
     const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
@@ -112,7 +134,7 @@ export async function handleImageVariation(req: Request) {
     const client = createImageProviderClient(provider, apiKey);
     if (!client.createVariation) return createErrorResponse(ErrorType.VALIDATION, `Provider ${provider} does not support image variations.`, 400, provider);
     
-    const otherParams = await extractOtherParamsFromFormData(formData, ['model', 'image']);
+    const otherParams = await extractOtherParamsFromFormData(formData, ['model', 'image', 'provider']);
 
     const responsePayload = await client.createVariation({ model, image, ...otherParams });
 
@@ -131,12 +153,17 @@ export async function handleVideoGeneration(req: Request) {
   let provider: ProviderName | undefined;
   try {
     const { user, supabaseClient } = await verifyAuth(req)
-    const { model, prompt, ...params } = await req.json()
+    const { model, prompt, provider: explicitProvider, ...params } = await req.json()
 
     if (!model || typeof model !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Model is required and must be a string.', 400)
     if (!prompt || typeof prompt !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Prompt is required and must be a string.', 400)
 
-    provider = getProviderFromModel(model);
+    try {
+        provider = getProviderFromModel(model, explicitProvider as string | undefined);
+    } catch (error) {
+        return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
+    }
+    
     const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
     if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
     
@@ -157,12 +184,17 @@ export async function handleTextToSpeech(req: Request) {
   let provider: ProviderName | undefined;
   try {
     const { user, supabaseClient } = await verifyAuth(req)
-    const { model, input, ...params } = await req.json()
+    const { model, input, provider: explicitProvider, ...params } = await req.json()
 
     if (!model || typeof model !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Model is required and must be a string.', 400)
     if (!input || typeof input !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Input text is required and must be a string.', 400)
 
-    provider = getProviderFromModel(model);
+    try {
+        provider = getProviderFromModel(model, explicitProvider as string | undefined);
+    } catch (error) {
+        return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
+    }
+
     const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
     if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
 
@@ -188,19 +220,25 @@ export async function handleSpeechToText(req: Request) {
     const formData = await req.formData();
 
     const model = formData.get('model') as string;
-    const audio = formData.get('audio') as File; // File object
+    const audio = formData.get('audio') as File;
+    const explicitProvider = formData.get('provider') as string | undefined;
 
     if (!model || typeof model !== 'string') return createErrorResponse(ErrorType.VALIDATION, 'Model (form field) is required.', 400);
     if (!audio) return createErrorResponse(ErrorType.VALIDATION, 'Audio file (form field) is required.', 400);
 
-    provider = getProviderFromModel(model);
+    try {
+        provider = getProviderFromModel(model, explicitProvider);
+    } catch (error) {
+        return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
+    }
+    
     const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
     if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
 
     const client = createAudioProviderClient(provider, apiKey);
     if (!client.transcribeSpeech) return createErrorResponse(ErrorType.VALIDATION, `Provider ${provider} does not support speech-to-text.`, 400, provider);
 
-    const otherParams = await extractOtherParamsFromFormData(formData, ['model', 'audio']);
+    const otherParams = await extractOtherParamsFromFormData(formData, ['model', 'audio', 'provider']);
 
     const responsePayload = await client.transcribeSpeech({ model, audio, ...otherParams });
 
@@ -212,3 +250,4 @@ export async function handleSpeechToText(req: Request) {
     return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500);
   }
 }
+
