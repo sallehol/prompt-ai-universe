@@ -6,7 +6,7 @@ import {
   checkApiKeyStatus as checkApiKeyStatusCore,
   setApiKey as setApiKeyCore,
   deleteApiKey as deleteApiKeyCore
-} from '../../api-keys.ts'; // Core logic functions
+} from '../../core/api-keys/index.ts'; // Updated import path
 
 export async function handleListProviders(req: Request, context: MiddlewareContext): Promise<Response> {
   const { requestId } = context;

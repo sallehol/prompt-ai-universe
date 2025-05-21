@@ -1,9 +1,8 @@
-
 import { SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
 import { createErrorResponse, ErrorType } from '../error-utils.ts'
 import { ProviderName } from '../providers/index.ts'; // Ensuring this uses index.ts
 import { createProviderClient } from '../clients/index.ts'; 
-import { getApiKeyInternal } from '../api-keys.ts'
+import { getApiKeyInternal } from '../core/api-keys/index.ts'; // Updated import path
 import { sanitizeProviderParams } from '../utils/text-model-utils.ts';
 
 export interface ProviderExecutionResult {
@@ -62,4 +61,3 @@ export async function executeProviderRequest(
 
   return { resultFromClient, finalParamsForProvider };
 }
-
