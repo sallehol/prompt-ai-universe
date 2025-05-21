@@ -1,4 +1,3 @@
-
 // supabase/functions/ai-proxy/middleware.ts
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SupabaseCache } from './cache.ts'
@@ -6,7 +5,7 @@ import { SupabaseRateLimiter } from './rate-limit.ts'
 import { SupabaseUsageLogger } from './monitoring.ts'
 import { createErrorResponse, ErrorType } from './error-utils.ts'
 import { corsHeaders } from './auth.ts'
-import { ProviderName } from './providers.ts'; // Assuming ProviderName enum exists
+import { getProviderFromModel, ProviderName } from './providers.ts';
 
 // Middleware Context
 export interface MiddlewareContext {
@@ -28,6 +27,52 @@ export interface MiddlewareContext {
 export interface Middleware {
   before?(req: Request, context: MiddlewareContext): Promise<Request | Response | void>; // void means continue
   after?(req: Request, res: Response, context: MiddlewareContext): Promise<Response | void>; // void means continue
+}
+
+// Provider Detection Middleware (NEW)
+export class ProviderDetectionMiddleware implements Middleware {
+  async before(req: Request, context: MiddlewareContext): Promise<void> {
+    if (req.method === 'POST') {
+      const contentType = req.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          // Ensure requestParams is populated. If already populated by a previous middleware, use it.
+          // For this setup, ProviderDetectionMiddleware is likely the first to parse the body.
+          if (!context.requestParams) {
+            const clonedReq = req.clone(); // Clone to read body without consuming it
+            const body = await clonedReq.json();
+            context.requestParams = body; // Store for other middleware and logging
+          }
+
+          const body = context.requestParams; // Use already parsed or freshly parsed body
+
+          if (body) {
+            let provider: ProviderName | string | undefined;
+            // Prefer provider derived from model if model exists, otherwise use direct provider field
+            if (body.model) {
+              provider = getProviderFromModel(body.model, body.provider);
+            } else if (body.provider) {
+              provider = body.provider;
+            }
+
+            if (provider) {
+              context.provider = provider;
+              console.log(`ProviderDetectionMiddleware: Set context.provider to '${provider}'`);
+            } else {
+              console.log("ProviderDetectionMiddleware: Could not determine provider from request body (model or provider field missing/unrecognized).");
+            }
+          } else {
+            console.log("ProviderDetectionMiddleware: Request body is empty or not valid JSON.");
+          }
+        } catch (error) {
+          // Log error but don't block the request.
+          // Downstream middleware (like RateLimiter) will use defaults if provider is not set.
+          console.error('ProviderDetectionMiddleware: Error parsing request body or determining provider:', error.message);
+        }
+      }
+    }
+  }
+  // No 'after' method needed for this specific middleware
 }
 
 // Caching middleware
@@ -67,14 +112,21 @@ export class CachingMiddleware implements Middleware {
     }
 
     try {
-      const clonedReq = req.clone(); // Clone to read body
-      const params = await clonedReq.json();
-      context.requestParams = params; // Store for logging and other middleware
+      // context.requestParams should be populated by ProviderDetectionMiddleware if it ran first
+      if (!context.requestParams) {
+          // Fallback: if ProviderDetectionMiddleware didn't run or failed to parse
+          console.warn("CachingMiddleware: context.requestParams not set, attempting to parse body.");
+          const clonedReq = req.clone(); 
+          context.requestParams = await clonedReq.json();
+      }
+      const params = context.requestParams;
 
-      const provider = context.provider || params.provider || 'unknown_provider_for_cache';
+      // Provider should be in context from ProviderDetectionMiddleware
+      // Fallback if not set, or if provider is part of cache key logic itself
+      const providerForCache = context.provider || (params && params.provider) || 'unknown_provider_for_cache';
       const endpoint = relevantPath.slice(1).join('/'); // e.g. models/text/completion
       
-      const cacheKey = SupabaseCache.generateCacheKey(provider as string, endpoint, params);
+      const cacheKey = SupabaseCache.generateCacheKey(providerForCache as string, endpoint, params);
       context.cacheKey = cacheKey; // Store for after middleware
       
       const cachedResponse = await this.cache.get(cacheKey);
@@ -98,15 +150,19 @@ export class CachingMiddleware implements Middleware {
     }
     
     try {
-      const clonedRes = res.clone();
-      const body = await clonedRes.json();
-      context.responseBody = body; // Store for logging
-      await this.cache.set(context.cacheKey, body);
+      // context.responseBody might be set by main handler or here
+      if (!context.responseBody) {
+        const clonedRes = res.clone();
+        context.responseBody = await clonedRes.json(); // Store for logging
+      }
+      await this.cache.set(context.cacheKey, context.responseBody);
       
       const newHeaders = new Headers(res.headers);
       newHeaders.set('X-Cache', 'MISS'); // Was a miss, now cached
       
-      return new Response(JSON.stringify(body), {
+      // Return a new response with potentially modified body (if it was stringified from context.responseBody)
+      // and new headers.
+      return new Response(JSON.stringify(context.responseBody), {
         status: res.status,
         statusText: res.statusText,
         headers: newHeaders
@@ -131,17 +187,19 @@ export class RateLimitingMiddleware implements Middleware {
       console.warn('RateLimiting: No user ID in context, skipping.');
       return; // No user, skip. Or could implement IP based rate limiting.
     }
-    if (!context.provider) {
-        console.warn('RateLimiting: No provider in context, skipping or using default.');
-        // If you want to rate limit even if provider isn't determined yet, set a default
-        // context.provider = 'default_rate_limit_provider'; 
-        // return; // Or proceed with a default provider
-    }
 
     const userId = context.user.id;
-    // Provider should be determined by earlier logic (e.g. from model in index.ts)
-    // and passed in context.provider. If not, use a default.
+    // Provider should now be determined by ProviderDetectionMiddleware and set in context.provider.
+    // If not, use a default.
     const provider = context.provider || 'default'; 
+    if (provider === 'default' && context.provider !== 'default') {
+        // This case should ideally not happen if ProviderDetectionMiddleware works.
+        // It means context.provider was set to something, but then evaluated as falsy here.
+        console.warn(`RateLimiting: context.provider was '${context.provider}', but resolved to 'default'. Check provider values.`);
+    } else if (!context.provider) {
+        console.log(`RateLimiting: No provider in context, using 'default'. Request path: ${new URL(req.url).pathname}`);
+    }
+
 
     try {
       const { allowed, remaining, reset, limit } = await this.rateLimiter.checkLimit(userId, provider as string);
@@ -153,6 +211,8 @@ export class RateLimitingMiddleware implements Middleware {
       };
 
       if (!allowed) {
+        // Log details before returning error
+        console.log(`Rate limit exceeded for user ${userId}, provider ${provider}. Limit: ${limit}, Remaining: ${remaining}, Reset: ${new Date(reset * 1000).toISOString()}`);
         return createErrorResponse(
           ErrorType.RATE_LIMIT,
           `Rate limit exceeded for ${provider}. Try again after ${new Date(reset * 1000).toISOString()}`,
@@ -161,9 +221,11 @@ export class RateLimitingMiddleware implements Middleware {
           context.rateLimitHeaders 
         );
       }
-      context.rateLimit = { userId, provider: provider as string }; // Store for incrementing usage in 'after'
+      // Store for incrementing usage in 'after' only if request was allowed
+      context.rateLimit = { userId, provider: provider as string }; 
     } catch (error) {
       console.error('RateLimitingMiddleware "before" error:', error.message);
+      // Fail open or handle error appropriately
     }
   }
   
@@ -176,19 +238,28 @@ export class RateLimitingMiddleware implements Middleware {
       }
     }
 
+    // Increment usage if rateLimit context was set (meaning request was allowed by 'before' hook)
+    // and the response is not a server error or the rate limit error itself.
     if (context.rateLimit && (res.status >= 200 && res.status < 500 && res.status !== 429)) {
-      // Increment usage for successful or client error requests (but not if rate limited itself, or server errors)
       try {
         await this.rateLimiter.incrementUsage(context.rateLimit.userId, context.rateLimit.provider);
+        console.log(`RateLimitingMiddleware: Incremented usage for user ${context.rateLimit.userId}, provider ${context.rateLimit.provider}`);
       } catch (error) {
         console.error('RateLimitingMiddleware "after" (incrementUsage) error:', error.message);
       }
     }
     
-    // Create a new response to apply headers, even if just passing through
-    // Clone to be safe if body is already consumed or streamed
-    const clonedResBody = await res.text(); // Read body as text to handle various content types
-    return new Response(clonedResBody, {
+    // Create a new response to apply headers.
+    // Body might have been consumed or transformed by other middleware (e.g. CachingMiddleware).
+    // If context.responseBody exists, use it, otherwise read from res.
+    let responseBodyContent: BodyInit | null = null;
+    if (context.responseBody && (res.headers.get('Content-Type')?.includes('application/json'))) {
+        responseBodyContent = JSON.stringify(context.responseBody);
+    } else {
+        responseBodyContent = await res.text(); // Fallback to text if not JSON or no context.responseBody
+    }
+    
+    return new Response(responseBodyContent, {
         status: res.status,
         statusText: res.statusText,
         headers: newHeaders
@@ -206,8 +277,7 @@ export class UsageLoggingMiddleware implements Middleware {
   
   async before(_req: Request, context: MiddlewareContext): Promise<void> {
     context.requestStartTime = Date.now();
-    // requestParams should be populated by CachingMiddleware or main handler if needed for logging
-    // and if request is POST with JSON body.
+    // requestParams should be populated by ProviderDetectionMiddleware or CachingMiddleware
   }
   
   async after(req: Request, res: Response, context: MiddlewareContext): Promise<void> {
@@ -217,18 +287,20 @@ export class UsageLoggingMiddleware implements Middleware {
     }
 
     const userId = context.user.id;
-    // Provider and model determined in main handler or other middleware
-    const provider = context.provider || 'unknown_provider_log';
-    let model = 'unknown_model_log';
+    // Provider should be in context from ProviderDetectionMiddleware
+    const providerForLog = context.provider || 'unknown_provider_log';
+    let modelForLog = 'unknown_model_log';
+    
+    // context.requestParams should be set by ProviderDetectionMiddleware or CachingMiddleware
     if (context.requestParams && context.requestParams.model) {
-        model = context.requestParams.model;
+        modelForLog = context.requestParams.model;
     } else if (req.method === 'POST' && !context.requestParams) {
-        // Attempt to parse body if not already done (e.g. if caching was skipped)
+        // Fallback if earlier middleware didn't parse (should be rare)
         try {
             const clonedReq = req.clone();
             const body = await clonedReq.json();
-            model = body.model || model;
-            context.requestParams = body; // For logging
+            modelForLog = body.model || modelForLog;
+            context.requestParams = body; 
         } catch (e) { /* ignore if not JSON or already parsed */ }
     }
 
@@ -239,38 +311,37 @@ export class UsageLoggingMiddleware implements Middleware {
     const endpoint = pathParts.slice(apiPathIndex +1).join('/'); // e.g. models/text/completion or usage/summary
 
 
-    // Try to get response body if not already in context from caching middleware
+    // Try to get response body if not already in context (e.g. from CachingMiddleware's after hook)
     let responseBodyToLog = context.responseBody;
-    let errorDetailsToLog = context.errorDetails;
+    let errorDetailsToLog = context.errorDetails; // Should be set by MiddlewareChain's error handling or main handler
 
     if (res.status !== 200 && !errorDetailsToLog) {
         try {
+            // Clone response as it might have been read
             const clonedRes = res.clone();
-            errorDetailsToLog = await clonedRes.json(); // Assuming error responses are JSON
+            errorDetailsToLog = await clonedRes.json();
         } catch (e) {
-            // If error response is not JSON, or already consumed
-            errorDetailsToLog = { status: res.status, message: res.statusText || "Failed to parse error response body" };
+            errorDetailsToLog = { status: res.status, message: res.statusText || "Failed to parse error response body for logging" };
         }
     } else if (res.status === 200 && !responseBodyToLog) {
          try {
             const clonedRes = res.clone();
             responseBodyToLog = await clonedRes.json();
         } catch (e) { 
-            /* ignore if not JSON or already consumed */ 
-            console.warn("UsageLogging: Could not parse success response for logging");
+            console.warn("UsageLogging: Could not parse success response for logging. It might not be JSON or was already consumed.");
         }
     }
 
     try {
       await this.usageLogger.logRequest(
         userId,
-        provider as string,
-        model,
+        providerForLog as string,
+        modelForLog,
         endpoint,
         context.requestParams || {note: "No JSON body or params in GET"},
         res.status,
-        responseBodyToLog,
-        errorDetailsToLog
+        responseBodyToLog, // Already parsed if available
+        errorDetailsToLog   // Already parsed if available
       );
     } catch (error) {
       console.error('UsageLoggingMiddleware "after" error:', error.message);
@@ -299,6 +370,15 @@ export class MiddlewareChain {
         const result = await middleware.before(currentReq, context);
         if (result instanceof Response) { // Short-circuit if a response is returned
           finalResponse = result;
+          // Capture error details if the response is an error
+          if (finalResponse.status >= 400 && !context.errorDetails) {
+            try {
+                const clonedFinalResponse = finalResponse.clone();
+                context.errorDetails = await clonedFinalResponse.json();
+            } catch (e) {
+                context.errorDetails = { status: finalResponse.status, message: finalResponse.statusText || "Error response from middleware 'before' hook."};
+            }
+          }
           break; 
         }
         if (result instanceof Request) { // Update request if modified
@@ -311,24 +391,40 @@ export class MiddlewareChain {
     if (!finalResponse) {
         try {
             finalResponse = await context.handler(currentReq, context);
+            // If handler returns a successful response, try to parse and store body if JSON
+            if (finalResponse.status >= 200 && finalResponse.status < 300 && finalResponse.headers.get('Content-Type')?.includes('application/json') && !context.responseBody) {
+                try {
+                    const clonedFinalResponse = finalResponse.clone();
+                    context.responseBody = await clonedFinalResponse.json();
+                } catch(e) {
+                    console.warn("MiddlewareChain: Could not parse successful handler response body for context.");
+                }
+            }
         } catch(e) {
-            console.error("Error in main handler:", e);
-            context.errorDetails = { message: e.message, stack: e.stack }; // Store error for logging
+            console.error("Error in main handler:", e.message, e.stack ? e.stack.split('\n')[0] : '');
+            context.errorDetails = { message: e.message, stack: e.stack, source: 'mainHandler' }; // Store error for logging
             finalResponse = createErrorResponse(ErrorType.SERVER, e.message || "Error in handler", 500);
         }
     }
     
     // Process "after" hooks in reverse order
+    // Pass the 'finalResponse' which could be from a 'before' hook or the main handler
+    let responseForAfterHooks = finalResponse;
     for (const middleware of [...this.middlewares].reverse()) {
       if (middleware.after) {
-        const result = await middleware.after(currentReq, finalResponse, context);
+        // Ensure responseForAfterHooks is not null, though it should always be a Response object by now
+        if (responseForAfterHooks === null) {
+            console.error("MiddlewareChain: finalResponse is null before 'after' hooks. This should not happen.");
+            // Create a generic error response if somehow null
+            responseForAfterHooks = createErrorResponse(ErrorType.SERVER, "Internal error in middleware processing", 500);
+        }
+        const result = await middleware.after(currentReq, responseForAfterHooks, context);
         if (result instanceof Response) { // Update response if modified
-          finalResponse = result;
+          responseForAfterHooks = result;
         }
       }
     }
     
-    return finalResponse;
+    return responseForAfterHooks!; // Assert non-null, as it's initialized or created
   }
 }
-

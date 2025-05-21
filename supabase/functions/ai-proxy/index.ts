@@ -3,7 +3,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { handleCors, verifyAuth, corsHeaders } from './auth.ts'
 import { createErrorResponse, ErrorType } from './error-utils.ts'
-import { getProviderFromModel, ProviderName } from './providers.ts'
+import { getProviderFromModel } from './providers.ts'
 import { 
   listProviders, 
   checkApiKeyStatus, 
@@ -25,6 +25,7 @@ import {
 
 import {
   MiddlewareChain,
+  ProviderDetectionMiddleware,
   CachingMiddleware,
   RateLimitingMiddleware,
   UsageLoggingMiddleware,
@@ -40,8 +41,6 @@ let middlewareInitialized = false;
 
 async function mainRequestHandler(req: Request, context: MiddlewareContext): Promise<Response> {
     const url = new URL(req.url);
-    // Example: /functions/v1/ai-proxy/api/models/text/completion
-    // pathParts will be [functions, v1, ai-proxy, api, models, text, completion]
     const pathParts = url.pathname.split('/').filter(Boolean);
     
     const functionNameIndex = pathParts.findIndex(p => p === 'ai-proxy');
@@ -49,28 +48,26 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
         return createErrorResponse(ErrorType.VALIDATION, 'Invalid API path. Must include /ai-proxy/api/', 400);
     }
     
-    // apiPath will be like ["api", "models", "text", "completion"]
     const apiPath = pathParts.slice(functionNameIndex + 1);
 
-    if (apiPath.length < 1) { // Should always have "api" at least
+    if (apiPath.length < 1) {
       return createErrorResponse(ErrorType.VALIDATION, 'API path segment not found after /ai-proxy/', 400);
     }
     
-    const mainEndpointCategory = apiPath[1]; // e.g. 'health', 'keys', 'models', 'image', 'video', 'audio', 'usage'
+    const mainEndpointCategory = apiPath[1];
     
-    // Populate provider in context if it's a model request and model is in body
+    // Provider and requestParams should now be populated by ProviderDetectionMiddleware.
+    // This block can act as a fallback or be further simplified if ProviderDetectionMiddleware is reliable.
     if (mainEndpointCategory === 'models' && req.method === 'POST') {
-        try {
-            const clonedReq = req.clone();
-            const body = await clonedReq.json();
-            if (body.model) {
-                context.provider = getProviderFromModel(body.model, body.provider);
-            }
-            // Store params for logging/caching if not already done
-            if (!context.requestParams) context.requestParams = body;
-        } catch (e) {
-            console.warn("Could not parse model from request body for provider detection:", e.message);
+        if (!context.provider && context.requestParams && context.requestParams.model) {
+            // If ProviderDetectionMiddleware didn't set provider, try to derive it here.
+            // This might happen if getProviderFromModel logic is more nuanced.
+            console.warn("mainRequestHandler: context.provider not set by middleware, attempting to derive from model.");
+            context.provider = getProviderFromModel(context.requestParams.model, context.requestParams.provider);
         }
+        // If requestParams were somehow not set by ProviderDetectionMiddleware (e.g., non-JSON POST)
+        // and this handler needs them, it would need to parse req.clone().json() itself.
+        // However, for JSON POSTs, ProviderDetectionMiddleware should handle it.
     }
 
 
@@ -97,15 +94,15 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
         
         switch (keyAction) {
           case 'providers':
-            return await listProviders(req)
+            return await listProviders(req) // req might need to be context.req if modified by middleware
           case 'status':
-            return await checkApiKeyStatus(req)
+            return await checkApiKeyStatus(req) // req might need to be context.req
           case 'set':
             if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-            return await setApiKey(req)
+            return await setApiKey(req) // req might need to be context.req
           case 'delete':
             if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST for delete.', 405) // Should be DELETE method semantically
-            return await deleteApiKey(req)
+            return await deleteApiKey(req) // req might need to be context.req
           default:
             return createErrorResponse(ErrorType.NOT_FOUND, `API key action '/${keyAction}' not found.`, 404);
         }
@@ -121,10 +118,10 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
 
         switch (modelType) {
           case 'text':
-            if (modelAction === 'completion') return await handleTextCompletion(req);
+            if (modelAction === 'completion') return await handleTextCompletion(req); // req might need to be context.req
             break;
           case 'chat':
-            if (modelAction === 'completion') return await handleChatCompletion(req);
+            if (modelAction === 'completion') return await handleChatCompletion(req); // req might need to be context.req
             break;
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Model endpoint /${modelType}/${modelAction} not found.`, 404);
@@ -137,9 +134,9 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
         const imageAction = apiPath[2];
         if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         switch (imageAction) {
-          case 'generation': return await handleImageGeneration(req);
-          case 'edit': return await handleImageEdit(req);
-          case 'variation': return await handleImageVariation(req);
+          case 'generation': return await handleImageGeneration(req); // req might need to be context.req
+          case 'edit': return await handleImageEdit(req); // req might need to be context.req
+          case 'variation': return await handleImageVariation(req); // req might need to be context.req
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Image action '/${imageAction}' not found.`, 404);
 
@@ -151,7 +148,7 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
         const videoAction = apiPath[2];
         if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         switch (videoAction) {
-          case 'generation': return await handleVideoGeneration(req);
+          case 'generation': return await handleVideoGeneration(req); // req might need to be context.req
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Video action '/${videoAction}' not found.`, 404);
         
@@ -163,8 +160,8 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
         const audioAction = apiPath[2];
         if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         switch (audioAction) {
-          case 'speech': return await handleTextToSpeech(req);
-          case 'transcription': return await handleSpeechToText(req);
+          case 'speech': return await handleTextToSpeech(req); // req might need to be context.req
+          case 'transcription': return await handleSpeechToText(req); // req might need to be context.req
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Audio action '/${audioAction}' not found.`, 404);
 
@@ -197,22 +194,21 @@ serve(async (req: Request) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
   
-  let user, supabaseClient: SupabaseClient; // Declared here to be available for context
+  let user, supabaseClient: SupabaseClient;
 
   try {
-    // Authenticate request for all API endpoints (except OPTIONS)
-    // verifyAuth throws on error, so this also protects downstream.
     const authResult = await verifyAuth(req);
     user = authResult.user;
     supabaseClient = authResult.supabaseClient;
 
-    // Initialize middleware chain once
     if (!middlewareInitialized) {
       middlewareChain
+        .use(new ProviderDetectionMiddleware()) // Add new middleware first
         .use(new CachingMiddleware(supabaseClient))
         .use(new RateLimitingMiddleware(supabaseClient))
         .use(new UsageLoggingMiddleware(supabaseClient));
       middlewareInitialized = true;
+      console.log("Middleware chain initialized with ProviderDetectionMiddleware.");
     }
     
     const context: MiddlewareContext = {
@@ -224,7 +220,7 @@ serve(async (req: Request) => {
     return await middlewareChain.process(req, context);
 
   } catch (error) {
-    console.error('Top-level error in ai-proxy/index.ts:', error.message, error.stack);
+    console.error('Top-level error in ai-proxy/index.ts:', error.message, error.stack ? error.stack.split('\n')[0] : '');
     
     // Check if it's an auth error from verifyAuth (which throws 'Unauthorized')
     if (error.message === 'Unauthorized') {
