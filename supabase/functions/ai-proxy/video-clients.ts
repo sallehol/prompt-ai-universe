@@ -1,6 +1,5 @@
-
 // supabase/functions/ai-proxy/video-clients.ts
-import { ProviderName } from './providers.ts'
+import { ProviderName } from './providers/types.ts' // Updated import path
 
 // Base interface for all video provider clients
 export interface VideoProviderClient {
