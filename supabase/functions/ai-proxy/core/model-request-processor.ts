@@ -1,10 +1,10 @@
-
 // supabase/functions/ai-proxy/core/model-request-processor.ts
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, verifyAuth } from '../auth.ts'
 import { createErrorResponse, ErrorType, handleProviderError } from '../error-utils.ts'
 import { getProviderFromModel, ProviderName } from '../providers.ts'
-import { createProviderClient } from '../provider-clients.ts'
+// Import from the new clients directory
+import { createProviderClient } from '../clients/index.ts'; 
 import { getApiKeyInternal } from '../api-keys.ts'
 import { MiddlewareContext } from '../middleware/index.ts';
 import { sanitizeProviderParams, processOpenAIStream } from '../utils/text-model-utils.ts';
@@ -144,4 +144,3 @@ export async function processModelRequest(
     return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500)
   }
 }
-
