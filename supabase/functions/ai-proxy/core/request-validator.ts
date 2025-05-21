@@ -2,7 +2,7 @@
 import { SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
 import { verifyAuth } from '../auth.ts'
 import { createErrorResponse, ErrorType } from '../error-utils.ts'
-import { getProviderFromModel, ProviderName } from '../providers.ts'
+import { getProviderFromModel, ProviderName } from '../providers/index.ts'; // Updated import path
 import { MiddlewareContext } from '../middleware/index.ts';
 
 export interface ValidatedRequestParams {
@@ -90,3 +90,4 @@ export async function validateRequest(
     };
   }
 }
+
