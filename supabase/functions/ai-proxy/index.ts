@@ -56,25 +56,16 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
     
     const mainEndpointCategory = apiPath[1];
     
-    // Provider and requestParams should now be populated by ProviderDetectionMiddleware.
-    // This block can act as a fallback or be further simplified if ProviderDetectionMiddleware is reliable.
     if (mainEndpointCategory === 'models' && req.method === 'POST') {
         if (!context.provider && context.requestParams && context.requestParams.model) {
-            // If ProviderDetectionMiddleware didn't set provider, try to derive it here.
-            // This might happen if getProviderFromModel logic is more nuanced.
             console.warn("mainRequestHandler: context.provider not set by middleware, attempting to derive from model.");
             context.provider = getProviderFromModel(context.requestParams.model, context.requestParams.provider);
         }
-        // If requestParams were somehow not set by ProviderDetectionMiddleware (e.g., non-JSON POST)
-        // and this handler needs them, it would need to parse req.clone().json() itself.
-        // However, for JSON POSTs, ProviderDetectionMiddleware should handle it.
     }
 
 
     switch (mainEndpointCategory) {
       case 'health':
-        // User is already available in context from the outer verifyAuth
-        // Ensure tables are created on health check.
         await Promise.all([
           ensureCacheTable(context.supabaseClient),
           ensureRateLimitTables(context.supabaseClient),
@@ -86,7 +77,6 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
         );
       
       case 'keys':
-        // ... keep existing code (key actions logic)
         if (apiPath.length < 3) {
              return createErrorResponse(ErrorType.VALIDATION, 'API key action not specified (e.g., /providers, /status).', 400);
         }
@@ -94,21 +84,20 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
         
         switch (keyAction) {
           case 'providers':
-            return await listProviders(req) // req might need to be context.req if modified by middleware
+            return await listProviders(req)
           case 'status':
-            return await checkApiKeyStatus(req) // req might need to be context.req
+            return await checkApiKeyStatus(req)
           case 'set':
             if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
-            return await setApiKey(req) // req might need to be context.req
+            return await setApiKey(req)
           case 'delete':
-            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST for delete.', 405) // Should be DELETE method semantically
-            return await deleteApiKey(req) // req might need to be context.req
+            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST for delete.', 405)
+            return await deleteApiKey(req)
           default:
             return createErrorResponse(ErrorType.NOT_FOUND, `API key action '/${keyAction}' not found.`, 404);
         }
       
       case 'models':
-        // ... keep existing code (model routing logic)
         if (apiPath.length < 4) { 
           return createErrorResponse(ErrorType.VALIDATION, 'Invalid model endpoint. Expected /api/models/{type}/{action}.', 400);
         }
@@ -118,50 +107,47 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
 
         switch (modelType) {
           case 'text':
-            if (modelAction === 'completion') return await handleTextCompletion(req); // req might need to be context.req
+            if (modelAction === 'completion') return await handleTextCompletion(req);
             break;
           case 'chat':
-            if (modelAction === 'completion') return await handleChatCompletion(req); // req might need to be context.req
+            if (modelAction === 'completion') return await handleChatCompletion(req);
             break;
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Model endpoint /${modelType}/${modelAction} not found.`, 404);
 
       case 'image':
-        // ... keep existing code (image routing logic)
         if (apiPath.length < 3) { 
           return createErrorResponse(ErrorType.VALIDATION, 'Invalid image endpoint. Expected /api/image/{action}.', 400);
         }
         const imageAction = apiPath[2];
         if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         switch (imageAction) {
-          case 'generation': return await handleImageGeneration(req); // req might need to be context.req
-          case 'edit': return await handleImageEdit(req); // req might need to be context.req
-          case 'variation': return await handleImageVariation(req); // req might need to be context.req
+          case 'generation': return await handleImageGeneration(req);
+          case 'edit': return await handleImageEdit(req);
+          case 'variation': return await handleImageVariation(req);
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Image action '/${imageAction}' not found.`, 404);
 
       case 'video':
-        // ... keep existing code (video routing logic)
         if (apiPath.length < 3) {
           return createErrorResponse(ErrorType.VALIDATION, 'Invalid video endpoint. Expected /api/video/{action}.', 400);
         }
         const videoAction = apiPath[2];
         if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         switch (videoAction) {
-          case 'generation': return await handleVideoGeneration(req); // req might need to be context.req
+          case 'generation': return await handleVideoGeneration(req);
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Video action '/${videoAction}' not found.`, 404);
         
       case 'audio':
-        // ... keep existing code (audio routing logic)
         if (apiPath.length < 3) {
           return createErrorResponse(ErrorType.VALIDATION, 'Invalid audio endpoint. Expected /api/audio/{action}.', 400);
         }
         const audioAction = apiPath[2];
         if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         switch (audioAction) {
-          case 'speech': return await handleTextToSpeech(req); // req might need to be context.req
-          case 'transcription': return await handleSpeechToText(req); // req might need to be context.req
+          case 'speech': return await handleTextToSpeech(req);
+          case 'transcription': return await handleSpeechToText(req);
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Audio action '/${audioAction}' not found.`, 404);
 
@@ -172,12 +158,11 @@ async function mainRequestHandler(req: Request, context: MiddlewareContext): Pro
         if (req.method !== 'GET') {
             return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected GET for usage summary.', 405);
         }
-        // User already authenticated and in context
         const period = url.searchParams.get('period') || 'month';
         const usageLogger = new SupabaseUsageLogger(context.supabaseClient);
         const summary = await usageLogger.getUsageSummary(context.user.id, period);
         
-        if (summary === null) { // Explicitly check for null if getUsageSummary can return it on error
+        if (summary === null) {
             return createErrorResponse(ErrorType.SERVER, 'Failed to retrieve usage summary.', 500);
         }
         return new Response(JSON.stringify({ summary }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -203,7 +188,7 @@ serve(async (req: Request) => {
 
     if (!middlewareInitialized) {
       middlewareChain
-        .use(new ProviderDetectionMiddleware()) // Add new middleware first
+        .use(new ProviderDetectionMiddleware()) 
         .use(new CachingMiddleware(supabaseClient))
         .use(new RateLimitingMiddleware(supabaseClient))
         .use(new UsageLoggingMiddleware(supabaseClient));
@@ -214,23 +199,35 @@ serve(async (req: Request) => {
     const context: MiddlewareContext = {
       user,
       supabaseClient,
-      handler: mainRequestHandler // The main logic is now the handler for the middleware
+      handler: mainRequestHandler
     };
     
-    return await middlewareChain.process(req, context);
+    const finalProcessedResponse = await middlewareChain.process(req, context);
+    console.log(`Serve function: MiddlewareChain.process returned Response with status: ${finalProcessedResponse.status}. About to return this response.`);
+    console.log(`Serve function: Response headers: ${JSON.stringify(Object.fromEntries(finalProcessedResponse.headers))}`);
+
+    if (finalProcessedResponse.body) {
+        try {
+            const clonedRes = finalProcessedResponse.clone();
+            const bodyText = await clonedRes.text();
+            console.log(`Serve function: Response body preview (first 200 chars): ${bodyText.substring(0, 200)}`);
+        } catch (e) {
+            console.error(`Serve function: Error cloning/reading final response body for logging: ${e.message}`);
+        }
+    } else {
+        console.log(`Serve function: Response body is null.`);
+    }
+    return finalProcessedResponse;
 
   } catch (error) {
     console.error('Top-level error in ai-proxy/index.ts:', error.message, error.stack ? error.stack.split('\n')[0] : '');
     
-    // Check if it's an auth error from verifyAuth (which throws 'Unauthorized')
     if (error.message === 'Unauthorized') {
       return createErrorResponse(ErrorType.AUTHENTICATION, 'Unauthorized', 401);
     }
-    // Check if it's an error from createErrorResponse (already a Response object)
     if (error instanceof Response) {
         return error;
     }
-    // Generic server error
     return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500);
   }
 })

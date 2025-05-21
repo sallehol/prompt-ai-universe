@@ -231,14 +231,13 @@ export class RateLimitingMiddleware implements Middleware {
         const currentTimeInSeconds = Math.floor(Date.now() / 1000);
         const retryAfterSeconds = Math.max(0, Math.ceil(reset - currentTimeInSeconds));
 
-        // Updated errorBody to match the requested structure
         const errorBody = {
           error: {
             type: ErrorType.RATE_LIMIT,
             message: `Rate limit exceeded for provider: ${provider}. Please try again after ${new Date(reset * 1000).toISOString()}`,
             provider: provider as string,
             limit: limit,
-            remaining: 0, // As per request, ensure 'remaining' is in the body and set to 0
+            remaining: 0, 
             reset_time: reset,
             retry_after: retryAfterSeconds,
           }
@@ -253,20 +252,20 @@ export class RateLimitingMiddleware implements Middleware {
           'Retry-After': retryAfterSeconds.toString()
         };
         
-        context.errorDetails = errorBody;
-
-        return new Response(JSON.stringify(errorBody), {
+        console.log(`RateLimitingMiddleware: Returning 429 response with headers: ${JSON.stringify(responseHeaders)}`);
+        const response = new Response(JSON.stringify(errorBody), {
           status: 429,
           headers: responseHeaders
         });
+        console.log(`RateLimitingMiddleware: 429 Response created successfully: ${response.status}`);
+        context.errorDetails = errorBody;
+
+        return response;
       }
       context.rateLimit = { userId, provider: provider as string }; 
     } catch (error) {
       console.error('RateLimitingMiddleware "before" error:', error.message);
       context.errorDetails = { message: error.message, source: 'RateLimitingMiddlewareCatch' };
-      // Optionally return a generic server error if the rate limiter itself fails
-      // For now, it fails open by not returning a Response, allowing the request to proceed
-      // or be caught by global error handling. Consider if a 500 here is more appropriate.
     }
   }
   
@@ -297,16 +296,12 @@ export class RateLimitingMiddleware implements Middleware {
     } else if (context.responseBody && contentType?.includes('application/json')) { // Use parsed body if available and JSON
         responseBodyContent = JSON.stringify(context.responseBody);
     } else if (res.body) { // Fallback for other types or if context.responseBody is not set
-        // Clone only if necessary to avoid consuming the body if it's already been used or is a stream
-        // This part can be tricky; ideally, context.responseBody should be reliably set for non-streams.
         try {
             const clonedRes = res.clone(); 
             responseBodyContent = await clonedRes.text(); 
         } catch (e) {
-            // If cloning fails (e.g. body already used), and it's not a stream, this could be an issue.
-            // For now, we assume if it's not a known stream type and responseBody isn't set, it might be empty or problematic.
             console.warn("RateLimitingMiddleware after: Could not clone/read response body.", e.message)
-            responseBodyContent = null; // Or res.body, if we want to risk passing an already consumed stream
+            responseBodyContent = null; 
         }
     }
     
@@ -419,6 +414,7 @@ export class MiddlewareChain {
       if (middleware.before) {
         const result = await middleware.before(currentReq, context);
         if (result instanceof Response) { 
+          console.log(`MiddlewareChain: Middleware ${middleware.constructor.name} .before returned Response with status: ${result.status}, headers: ${JSON.stringify(Object.fromEntries(result.headers))}`);
           finalResponse = result;
           if (finalResponse.status >= 400 && !context.errorDetails) {
             try {
@@ -438,7 +434,9 @@ export class MiddlewareChain {
 
     if (!finalResponse) {
         try {
+            console.log("MiddlewareChain: No response from 'before' hooks, calling main handler.");
             finalResponse = await context.handler(currentReq, context);
+            console.log(`MiddlewareChain: Main handler returned Response with status: ${finalResponse.status}, headers: ${JSON.stringify(Object.fromEntries(finalResponse.headers))}`);
             const finalContentType = finalResponse.headers.get('Content-Type');
             if (finalResponse.status >= 200 && finalResponse.status < 300 && finalContentType?.includes('application/json') && !context.responseBody) {
                 try {
@@ -452,6 +450,7 @@ export class MiddlewareChain {
             console.error("Error in main handler:", e.message, e.stack ? e.stack.split('\n')[0] : '');
             context.errorDetails = { message: e.message, stack: e.stack, source: 'mainHandler' }; 
             finalResponse = createErrorResponse(ErrorType.SERVER, e.message || "Error in handler", 500);
+            console.log(`MiddlewareChain: Main handler caught error, created Response with status: ${finalResponse.status}`);
         }
     }
     
@@ -459,16 +458,25 @@ export class MiddlewareChain {
     for (const middleware of [...this.middlewares].reverse()) {
       if (middleware.after) {
         if (responseForAfterHooks === null) {
-            console.error("MiddlewareChain: finalResponse is null before 'after' hooks. This should not happen.");
+            console.error("MiddlewareChain: responseForAfterHooks is null before 'after' hooks. This should not happen.");
             responseForAfterHooks = createErrorResponse(ErrorType.SERVER, "Internal error in middleware processing", 500);
         }
+        console.log(`MiddlewareChain: Calling ${middleware.constructor.name} .after with response status: ${responseForAfterHooks?.status}`);
         const result = await middleware.after(currentReq, responseForAfterHooks, context);
         if (result instanceof Response) { 
+          console.log(`MiddlewareChain: ${middleware.constructor.name} .after returned new Response with status: ${result.status}, headers: ${JSON.stringify(Object.fromEntries(result.headers))}`);
           responseForAfterHooks = result;
         }
       }
     }
     
+    if (responseForAfterHooks) {
+      console.log(`MiddlewareChain: Returning finalResponse from .process with status: ${responseForAfterHooks.status}, headers: ${JSON.stringify(Object.fromEntries(responseForAfterHooks.headers))}`);
+    } else {
+      // This case should ideally not be reached if error handling and response creation are robust.
+      console.error("MiddlewareChain: CRITICAL - responseForAfterHooks is null before returning from .process. Creating fallback error response.");
+      responseForAfterHooks = createErrorResponse(ErrorType.SERVER, "Internal server error: Null response encountered in middleware processing", 500);
+    }
     return responseForAfterHooks!; 
   }
 }
