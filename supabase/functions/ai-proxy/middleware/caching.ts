@@ -1,4 +1,3 @@
-
 // supabase/functions/ai-proxy/middleware/caching.ts
 import { Middleware, MiddlewareContext } from './index.ts';
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -60,15 +59,23 @@ export class CachingMiddleware implements Middleware {
       return; // Cannot proceed without params for caching logic
     }
     
-    // CRITICAL FIX: Properly handle cache parameter
-    if (context.requestParams && 'cache' in context.requestParams) {
-      context.explicitCachePreference = !!context.requestParams.cache;
-      console.log(`[${requestId}] CachingMiddleware.before: Explicit cache preference set to ${context.explicitCachePreference}`);
+    // CRITICAL FIX: Properly handle cache parameter with case-insensitivity
+    if (context.requestParams) {
+      // Check for cache parameter in any case (cache, Cache, CACHE)
+      const cacheParamKey = Object.keys(context.requestParams)
+        .find(key => key.toLowerCase() === 'cache');
       
-      const { cache, ...paramsWithoutCache } = context.requestParams;
-      context.requestParams = paramsWithoutCache;
-      
-      console.log(`[${requestId}] CachingMiddleware.before: Removed 'cache' parameter from request params. New params:`, JSON.stringify(context.requestParams));
+      if (cacheParamKey) {
+        context.explicitCachePreference = !!context.requestParams[cacheParamKey];
+        console.log(`[${requestId}] CachingMiddleware.before: Explicit cache preference set to ${context.explicitCachePreference} from param '${cacheParamKey}'`);
+        
+        // Create a new object without the cache parameter
+        const newParams = { ...context.requestParams };
+        delete newParams[cacheParamKey];
+        context.requestParams = newParams;
+        
+        console.log(`[${requestId}] CachingMiddleware.before: Removed '${cacheParamKey}' parameter from request params. New params:`, JSON.stringify(context.requestParams));
+      }
     }
 
     if (context.explicitCachePreference === false) {
