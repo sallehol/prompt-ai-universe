@@ -1,6 +1,5 @@
-
 // supabase/functions/ai-proxy/audio-clients.ts
-import { ProviderName } from './providers.ts'
+import { ProviderName } from './providers/types.ts'; // Updated import path
 
 // Base interface for all audio provider clients
 export interface AudioProviderClient {
