@@ -7,7 +7,7 @@ import { retrieveValidatedApiKey } from './apiKeyHandler.ts'
 import { sendTextRequest, sendChatRequest } from './requestSender.ts'
 import { ProviderExecutionResult } from './interfaces.ts'
 
-export { ProviderExecutionResult } from './interfaces.ts' // Re-export for convenience
+export type { ProviderExecutionResult }; // Re-export for convenience
 
 export async function executeProviderRequest(
   user: User,
@@ -52,3 +52,4 @@ export async function executeProviderRequest(
     return { resultFromClient, finalParamsForProvider };
   }
 }
+
