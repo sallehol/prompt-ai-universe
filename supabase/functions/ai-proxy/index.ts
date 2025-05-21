@@ -1,14 +1,14 @@
 // supabase/functions/ai-proxy/index.ts
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { handleCors, verifyAuth, corsHeaders } from './auth.ts'
-import { createErrorResponse, ErrorType } from './error-utils.ts' // Removed handleProviderError as it's used in other endpoint files
-import { getProviderFromModel, ProviderName, ProviderType } from './providers.ts'
+import { createErrorResponse, ErrorType } from './error-utils.ts'
+import { getProviderFromModel, ProviderName } from './providers.ts'
 import { 
   listProviders, 
   checkApiKeyStatus, 
   setApiKey, 
   deleteApiKey
-  // getApiKeyInternal is not imported here, it's used by endpoint handlers
 } from './api-keys.ts'
 import {
   handleTextCompletion,
@@ -17,49 +17,80 @@ import {
 import {
   handleImageGeneration,
   handleImageEdit,
-  handleImageVariation, // Added new handler
+  handleImageVariation,
   handleVideoGeneration,
   handleTextToSpeech,
   handleSpeechToText
-} from './multimodal-endpoints.ts' // New import for multimodal handlers
+} from './multimodal-endpoints.ts'
 
-serve(async (req) => {
-  // Handle CORS preflight requests
-  const corsResponse = handleCors(req)
-  if (corsResponse) return corsResponse
-  
-  try {
-    const url = new URL(req.url)
-    const pathParts = url.pathname.split('/').filter(Boolean)
+import {
+  MiddlewareChain,
+  CachingMiddleware,
+  RateLimitingMiddleware,
+  UsageLoggingMiddleware,
+  MiddlewareContext
+} from './middleware.ts'
+import { ensureCacheTable } from './cache.ts'
+import { ensureRateLimitTables } from './rate-limit.ts'
+import { ensureUsageLogTable, SupabaseUsageLogger } from './monitoring.ts'
+
+// Initialize middleware chain
+const middlewareChain = new MiddlewareChain();
+let middlewareInitialized = false;
+
+async function mainRequestHandler(req: Request, context: MiddlewareContext): Promise<Response> {
+    const url = new URL(req.url);
+    // Example: /functions/v1/ai-proxy/api/models/text/completion
+    // pathParts will be [functions, v1, ai-proxy, api, models, text, completion]
+    const pathParts = url.pathname.split('/').filter(Boolean);
     
     const functionNameIndex = pathParts.findIndex(p => p === 'ai-proxy');
-    if (functionNameIndex === -1) {
-        return createErrorResponse(ErrorType.VALIDATION, 'Invalid path: ai-proxy segment not found.', 400);
+    if (functionNameIndex === -1 || pathParts[functionNameIndex + 1] !== 'api') {
+        return createErrorResponse(ErrorType.VALIDATION, 'Invalid API path. Must include /ai-proxy/api/', 400);
     }
-    // apiPath will be like ["api", "models", "text", "completion"] or ["api", "image", "generation"]
+    
+    // apiPath will be like ["api", "models", "text", "completion"]
     const apiPath = pathParts.slice(functionNameIndex + 1);
 
-    if (apiPath.length < 1 || apiPath[0] !== 'api') {
-      return createErrorResponse(
-        ErrorType.VALIDATION,
-        'Invalid endpoint structure. Path must start with /api/... after /ai-proxy/',
-        400
-      )
+    if (apiPath.length < 1) { // Should always have "api" at least
+      return createErrorResponse(ErrorType.VALIDATION, 'API path segment not found after /ai-proxy/', 400);
     }
     
-    const mainEndpointCategory = apiPath[1] // e.g. 'health', 'keys', 'models', 'image', 'video', 'audio'
+    const mainEndpointCategory = apiPath[1]; // e.g. 'health', 'keys', 'models', 'image', 'video', 'audio', 'usage'
     
+    // Populate provider in context if it's a model request and model is in body
+    if (mainEndpointCategory === 'models' && req.method === 'POST') {
+        try {
+            const clonedReq = req.clone();
+            const body = await clonedReq.json();
+            if (body.model) {
+                context.provider = getProviderFromModel(body.model, body.provider);
+            }
+            // Store params for logging/caching if not already done
+            if (!context.requestParams) context.requestParams = body;
+        } catch (e) {
+            console.warn("Could not parse model from request body for provider detection:", e.message);
+        }
+    }
+
+
     switch (mainEndpointCategory) {
       case 'health':
-        // For health check, we need to verify auth first
-        const { user } = await verifyAuth(req) // supabaseClient also returned but not used here
+        // User is already available in context from the outer verifyAuth
+        // Ensure tables are created on health check.
+        await Promise.all([
+          ensureCacheTable(context.supabaseClient),
+          ensureRateLimitTables(context.supabaseClient),
+          ensureUsageLogTable(context.supabaseClient)
+        ]);
         return new Response(
-          JSON.stringify({ status: 'ok', user: { id: user.id, email: user.email } }),
+          JSON.stringify({ status: 'ok', user: { id: context.user?.id, email: context.user?.email } }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        );
       
       case 'keys':
-        if (apiPath.length < 3) { // Expects /api/keys/{action}
+        // ... keep existing code (key actions logic)
+        if (apiPath.length < 3) {
              return createErrorResponse(ErrorType.VALIDATION, 'API key action not specified (e.g., /providers, /status).', 400);
         }
         const keyAction = apiPath[2]
@@ -73,142 +104,137 @@ serve(async (req) => {
             if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405)
             return await setApiKey(req)
           case 'delete':
-            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST for delete.', 405)
+            if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST for delete.', 405) // Should be DELETE method semantically
             return await deleteApiKey(req)
           default:
-            return createErrorResponse(
-              ErrorType.NOT_FOUND,
-              `API key action '/${keyAction}' not found.`,
-              404
-            )
+            return createErrorResponse(ErrorType.NOT_FOUND, `API key action '/${keyAction}' not found.`, 404);
         }
       
-      case 'models': // This will now only handle text/chat models
-        // Path structure: /api/models/{modelType}/{modelAction}
-        // e.g., /api/models/text/completion  => apiPath = ["api", "models", "text", "completion"]
+      case 'models':
+        // ... keep existing code (model routing logic)
         if (apiPath.length < 4) { 
-          return createErrorResponse(
-            ErrorType.VALIDATION,
-            'Invalid model endpoint structure. Expected /api/models/{type}/{action}.',
-            400
-          )
+          return createErrorResponse(ErrorType.VALIDATION, 'Invalid model endpoint. Expected /api/models/{type}/{action}.', 400);
         }
-        
-        const modelType = apiPath[2]       // "text", "chat"
-        const modelAction = apiPath[3]     // "completion"
-        
-        if (req.method !== 'POST') {
-            return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
-        }
+        const modelType = apiPath[2];
+        const modelAction = apiPath[3];
+        if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
 
         switch (modelType) {
           case 'text':
-            if (modelAction === 'completion') {
-              return await handleTextCompletion(req);
-            }
+            if (modelAction === 'completion') return await handleTextCompletion(req);
             break;
           case 'chat':
-            if (modelAction === 'completion') {
-              return await handleChatCompletion(req);
-            }
+            if (modelAction === 'completion') return await handleChatCompletion(req);
             break;
         }
-        
-        return createErrorResponse(
-          ErrorType.NOT_FOUND,
-          `Model endpoint /${modelType}/${modelAction} not found or not supported.`,
-          404
-        );
+        return createErrorResponse(ErrorType.NOT_FOUND, `Model endpoint /${modelType}/${modelAction} not found.`, 404);
 
       case 'image':
-        // Path structure: /api/image/{action} e.g. /api/image/generation
+        // ... keep existing code (image routing logic)
         if (apiPath.length < 3) { 
-          return createErrorResponse(
-            ErrorType.VALIDATION,
-            'Invalid image endpoint structure. Expected /api/image/{action}.',
-            400
-          );
+          return createErrorResponse(ErrorType.VALIDATION, 'Invalid image endpoint. Expected /api/image/{action}.', 400);
         }
-        const imageAction = apiPath[2]; // "generation", "edit", "variation"
-        if (req.method !== 'POST') {
-          return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
-        }
+        const imageAction = apiPath[2];
+        if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         switch (imageAction) {
-          case 'generation':
-            return await handleImageGeneration(req);
-          case 'edit':
-            return await handleImageEdit(req);
-          case 'variation':
-            return await handleImageVariation(req);
+          case 'generation': return await handleImageGeneration(req);
+          case 'edit': return await handleImageEdit(req);
+          case 'variation': return await handleImageVariation(req);
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Image action '/${imageAction}' not found.`, 404);
 
       case 'video':
-        // Path structure: /api/video/{action} e.g. /api/video/generation
+        // ... keep existing code (video routing logic)
         if (apiPath.length < 3) {
-          return createErrorResponse(
-            ErrorType.VALIDATION,
-            'Invalid video endpoint structure. Expected /api/video/{action}.',
-            400
-          );
+          return createErrorResponse(ErrorType.VALIDATION, 'Invalid video endpoint. Expected /api/video/{action}.', 400);
         }
-        const videoAction = apiPath[2]; // "generation"
-        if (req.method !== 'POST') {
-          return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
-        }
+        const videoAction = apiPath[2];
+        if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         switch (videoAction) {
-          case 'generation':
-            return await handleVideoGeneration(req);
+          case 'generation': return await handleVideoGeneration(req);
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Video action '/${videoAction}' not found.`, 404);
         
       case 'audio':
-        // Path structure: /api/audio/{action} e.g. /api/audio/speech
+        // ... keep existing code (audio routing logic)
         if (apiPath.length < 3) {
-          return createErrorResponse(
-            ErrorType.VALIDATION,
-            'Invalid audio endpoint structure. Expected /api/audio/{action}.',
-            400
-          );
+          return createErrorResponse(ErrorType.VALIDATION, 'Invalid audio endpoint. Expected /api/audio/{action}.', 400);
         }
-        const audioAction = apiPath[2]; // "speech", "transcription"
-        if (req.method !== 'POST') {
-          return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
-        }
+        const audioAction = apiPath[2];
+        if (req.method !== 'POST') return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected POST.', 405);
         switch (audioAction) {
-          case 'speech': // Text-to-speech
-            return await handleTextToSpeech(req);
-          case 'transcription': // Speech-to-text
-            return await handleSpeechToText(req);
+          case 'speech': return await handleTextToSpeech(req);
+          case 'transcription': return await handleSpeechToText(req);
         }
         return createErrorResponse(ErrorType.NOT_FOUND, `Audio action '/${audioAction}' not found.`, 404);
+
+      case 'usage':
+        if (apiPath.length < 3 || apiPath[2] !== 'summary') {
+          return createErrorResponse(ErrorType.VALIDATION, 'Invalid usage endpoint. Expected /api/usage/summary.', 400);
+        }
+        if (req.method !== 'GET') {
+            return createErrorResponse(ErrorType.VALIDATION, 'Method Not Allowed, expected GET for usage summary.', 405);
+        }
+        // User already authenticated and in context
+        const period = url.searchParams.get('period') || 'month';
+        const usageLogger = new SupabaseUsageLogger(context.supabaseClient);
+        const summary = await usageLogger.getUsageSummary(context.user.id, period);
+        
+        if (summary === null) { // Explicitly check for null if getUsageSummary can return it on error
+            return createErrorResponse(ErrorType.SERVER, 'Failed to retrieve usage summary.', 500);
+        }
+        return new Response(JSON.stringify({ summary }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       
       default:
         if (mainEndpointCategory) {
-            return createErrorResponse(
-              ErrorType.NOT_FOUND,
-              `Endpoint category '/api/${mainEndpointCategory}' not implemented.`,
-              501 
-            )
+            return createErrorResponse(ErrorType.NOT_FOUND, `Endpoint category '/api/${mainEndpointCategory}' not found.`, 404);
         }
-        return createErrorResponse(
-            ErrorType.VALIDATION,
-            'Invalid API endpoint path. Main category not specified.',
-            400
-        );
+        return createErrorResponse(ErrorType.VALIDATION, 'Invalid API endpoint. Main category not specified.', 400);
     }
+}
+
+serve(async (req: Request) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
+  
+  let user, supabaseClient: SupabaseClient; // Declared here to be available for context
+
+  try {
+    // Authenticate request for all API endpoints (except OPTIONS)
+    // verifyAuth throws on error, so this also protects downstream.
+    const authResult = await verifyAuth(req);
+    user = authResult.user;
+    supabaseClient = authResult.supabaseClient;
+
+    // Initialize middleware chain once
+    if (!middlewareInitialized) {
+      middlewareChain
+        .use(new CachingMiddleware(supabaseClient))
+        .use(new RateLimitingMiddleware(supabaseClient))
+        .use(new UsageLoggingMiddleware(supabaseClient));
+      middlewareInitialized = true;
+    }
+    
+    const context: MiddlewareContext = {
+      user,
+      supabaseClient,
+      handler: mainRequestHandler // The main logic is now the handler for the middleware
+    };
+    
+    return await middlewareChain.process(req, context);
+
   } catch (error) {
-    console.error('Error processing request in ai-proxy/index.ts:', error.message, error.stack)
+    console.error('Top-level error in ai-proxy/index.ts:', error.message, error.stack);
     
-    if (error.message === 'Unauthorized') { // From verifyAuth if it throws directly
-      return createErrorResponse(ErrorType.AUTHENTICATION, 'Unauthorized', 401)
+    // Check if it's an auth error from verifyAuth (which throws 'Unauthorized')
+    if (error.message === 'Unauthorized') {
+      return createErrorResponse(ErrorType.AUTHENTICATION, 'Unauthorized', 401);
     }
-    
     // Check if it's an error from createErrorResponse (already a Response object)
     if (error instanceof Response) {
         return error;
     }
-
-    return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500)
+    // Generic server error
+    return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500);
   }
 })

@@ -9,6 +9,126 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ai_rate_limit_config: {
+        Row: {
+          created_at: string
+          id: string
+          limit: number
+          provider: string
+          updated_at: string
+          window: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          limit: number
+          provider: string
+          updated_at?: string
+          window: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          limit?: number
+          provider?: string
+          updated_at?: string
+          window?: number
+        }
+        Relationships: []
+      }
+      ai_rate_limits: {
+        Row: {
+          created_at: string
+          id: string
+          last_reset: number
+          provider: string
+          usage: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_reset: number
+          provider: string
+          usage?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_reset?: number
+          provider?: string
+          usage?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_request_cache: {
+        Row: {
+          created_at: string
+          key: string
+          ttl: number
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          ttl?: number
+          value: Json
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          ttl?: number
+          value?: Json
+        }
+        Relationships: []
+      }
+      ai_usage_logs: {
+        Row: {
+          created_at: string
+          endpoint: string
+          error_message: string | null
+          id: string
+          input_tokens: number
+          model: string
+          output_tokens: number
+          params: Json | null
+          provider: string
+          status: string
+          total_tokens: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          error_message?: string | null
+          id?: string
+          input_tokens?: number
+          model: string
+          output_tokens?: number
+          params?: Json | null
+          provider: string
+          status: string
+          total_tokens?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          error_message?: string | null
+          id?: string
+          input_tokens?: number
+          model?: string
+          output_tokens?: number
+          params?: Json | null
+          provider?: string
+          status?: string
+          total_tokens?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       api_keys: {
         Row: {
           created_at: string | null
@@ -62,6 +182,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_table_exists: {
+        Args: { p_table_name: string }
+        Returns: boolean
+      }
+      create_cache_table: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      create_rate_limit_config_table: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      create_rate_limit_table: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      create_usage_log_table: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       decrypt_api_key: {
         Args: { p_encrypted_key: string }
         Returns: string
@@ -77,6 +217,23 @@ export type Database = {
       get_api_key: {
         Args: { p_user_id: string; p_provider: string }
         Returns: string
+      }
+      get_usage_summary: {
+        Args: { p_user_id: string; p_start_date: string; p_end_date: string }
+        Returns: {
+          provider: string
+          model: string
+          request_count: number
+          success_count: number
+          error_count: number
+          total_tokens_sum: number
+          input_tokens_sum: number
+          output_tokens_sum: number
+        }[]
+      }
+      increment_rate_limit_usage: {
+        Args: { p_user_id: string; p_provider: string; p_amount: number }
+        Returns: undefined
       }
       list_api_keys: {
         Args: { p_user_id: string }
