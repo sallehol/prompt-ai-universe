@@ -1,10 +1,10 @@
-
 // supabase/functions/ai-proxy/multimodal-endpoints.ts
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, verifyAuth } from './auth.ts'
 import { createErrorResponse, ErrorType, handleProviderError } from './error-utils.ts'
-import { getProviderFromModel, ProviderName } from './providers.ts'
-import { getApiKeyInternal } from './api-keys.ts'
+import { getProviderFromModel } from './providers/model-mapping.ts'
+import { ProviderName } from './providers/types.ts'
+import { getApiKeyInternal } from './core/api-keys/get-key-internal.ts'
 import { createImageProviderClient } from './image-clients.ts'
 import { createVideoProviderClient } from './video-clients.ts'
 import { createAudioProviderClient } from './audio-clients.ts'
@@ -41,9 +41,10 @@ export async function handleImageGeneration(req: Request) {
         return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
     }
 
-    const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
-    if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
-    
+    const apiKeyResult = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
+    if (!apiKeyResult) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKey = apiKeyResult;
+
     const client = createImageProviderClient(provider, apiKey);
     const responsePayload = await client.generateImage({ model, prompt, ...params });
     
@@ -79,8 +80,9 @@ export async function handleImageEdit(req: Request) {
         return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
     }
 
-    const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
-    if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKeyResult = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
+    if (!apiKeyResult) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKey = apiKeyResult;
 
     const client = createImageProviderClient(provider, apiKey);
     if (!client.editImage) return createErrorResponse(ErrorType.VALIDATION, `Provider ${provider} does not support image editing.`, 400, provider);
@@ -114,22 +116,14 @@ export async function handleImageVariation(req: Request) {
     if (!image) return createErrorResponse(ErrorType.VALIDATION, 'Image (form field) is required for variations.', 400);
     
     try {
-        // For variations, OpenAI is often implied if no explicit provider, but good to allow override
         provider = getProviderFromModel(model, explicitProvider || ProviderName.OPENAI); 
     } catch (error) {
-         // If explicitProvider was OpenAI and model wasn't OpenAI, this error might be confusing.
-         // However, getProviderFromModel should handle it.
         return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
     }
 
-    if (provider !== ProviderName.OPENAI && !explicitProvider) { 
-        // Defaulting to OpenAI if no explicit provider and model doesn't scream OpenAI can be risky.
-        // However, if `getProviderFromModel` correctly identified it as something else, this check is redundant.
-        // The main check is `client.createVariation`.
-    }
-
-    const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
-    if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKeyResult = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
+    if (!apiKeyResult) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKey = apiKeyResult;
 
     const client = createImageProviderClient(provider, apiKey);
     if (!client.createVariation) return createErrorResponse(ErrorType.VALIDATION, `Provider ${provider} does not support image variations.`, 400, provider);
@@ -164,8 +158,9 @@ export async function handleVideoGeneration(req: Request) {
         return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
     }
     
-    const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
-    if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKeyResult = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
+    if (!apiKeyResult) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKey = apiKeyResult;
     
     const client = createVideoProviderClient(provider, apiKey);
     const responsePayload = await client.generateVideo({ model, prompt, ...params });
@@ -195,8 +190,9 @@ export async function handleTextToSpeech(req: Request) {
         return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
     }
 
-    const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
-    if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKeyResult = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
+    if (!apiKeyResult) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKey = apiKeyResult;
 
     const client = createAudioProviderClient(provider, apiKey);
     if (!client.generateSpeech) return createErrorResponse(ErrorType.VALIDATION, `Provider ${provider} does not support text-to-speech.`, 400, provider);
@@ -232,8 +228,9 @@ export async function handleSpeechToText(req: Request) {
         return createErrorResponse(ErrorType.VALIDATION, `Provider detection failed: ${error.message}`, 400);
     }
     
-    const apiKey = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
-    if (!apiKey) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKeyResult = await getApiKeyInternal(supabaseClient as SupabaseClient, user.id, provider);
+    if (!apiKeyResult) return createErrorResponse(ErrorType.AUTHENTICATION, `API key for ${provider} not set or retrievable.`, 401, provider);
+    const apiKey = apiKeyResult;
 
     const client = createAudioProviderClient(provider, apiKey);
     if (!client.transcribeSpeech) return createErrorResponse(ErrorType.VALIDATION, `Provider ${provider} does not support speech-to-text.`, 400, provider);
@@ -250,4 +247,3 @@ export async function handleSpeechToText(req: Request) {
     return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500);
   }
 }
-
