@@ -5,56 +5,39 @@ import { ChatService } from '@/services/ChatService';
 import type { ApiError } from '@/api/types/apiError';
 import { logger } from '@/utils/logger';
 import { getModelConfig } from '@/config/modelConfig';
-import { createAuthError, normalizeApiError } from '@/utils/errorUtils';
+import { normalizeApiError } from '@/utils/errorUtils'; // createAuthError is not used here anymore
 
 interface UseAiMessageHandlerProps {
-  getApiKey: (provider: string) => string;
+  // getApiKey is no longer needed here if apiKey is passed directly to sendMessageToAi
 }
 
-// List of providers for whom the platform manages API keys via subscriptions
-const PLATFORM_MANAGED_PROVIDERS = ['openai', 'anthropic', 'google', 'mistral'];
+// PLATFORM_MANAGED_PROVIDERS is not used here anymore if apiKey logic is externalized
+// const PLATFORM_MANAGED_PROVIDERS = ['openai', 'anthropic', 'google', 'mistral'];
 
-export const useAiMessageHandler = ({ getApiKey }: UseAiMessageHandlerProps) => {
+export const useAiMessageHandler = (/* { getApiKey }: UseAiMessageHandlerProps */) => {
   const [isAiTyping, setIsAiTyping] = useState<boolean>(false);
   const [isError, setIsError] = useState<boolean>(false);
   const [errorDetails, setErrorDetails] = useState<ApiError | null>(null);
-  const chatService = new ChatService();
+  const chatService = new ChatService(); // chatService instance
 
   const sendMessageToAi = useCallback(async (
     messages: Message[], 
-    modelId: string
+    modelId: string,
+    apiKeyFromManager: string // New argument for the API key
   ) => {
     setIsAiTyping(true);
     setIsError(false);
     setErrorDetails(null);
 
-    let apiKey = ''; // Initialize apiKey
-
     try {
-      const modelConfig = getModelConfig(modelId);
+      const modelConfig = getModelConfig(modelId); // Still useful for logging provider
       
-      const isPlatformManaged = PLATFORM_MANAGED_PROVIDERS.includes(modelConfig.provider.toLowerCase());
-
-      if (modelConfig.requiresApiKey && !isPlatformManaged) {
-        // For non-platform managed models, get key from local storage
-        apiKey = getApiKey(modelConfig.provider);
-        if (!apiKey) {
-          logger.warn(`[useAiMessageHandler] User-provided API key for ${modelConfig.provider} not found.`);
-          throw createAuthError(modelConfig.provider);
-        }
-      } else if (modelConfig.requiresApiKey && isPlatformManaged) {
-        // For platform-managed models, apiKey remains empty.
-        // The proxy will use the platform's key.
-        logger.log(`[useAiMessageHandler] Using platform-managed API key for ${modelConfig.provider}.`);
-        apiKey = ''; 
-      }
-      
-      logger.log(`[useAiMessageHandler] Sending to ChatService. Model: ${modelId}, Provider: ${modelConfig.provider}, RequiresKey: ${modelConfig.requiresApiKey}, IsSimulated: ${modelConfig.isSimulated}, IsPlatformManaged: ${isPlatformManaged}`);
+      logger.log(`[useAiMessageHandler] Sending to ChatService. Model: ${modelId}, Provider: ${modelConfig.provider}, ApiKeyProvided: ${!!apiKeyFromManager}, IsSimulated: ${modelConfig.isSimulated}`);
       
       const aiResponseMessage = await chatService.sendMessage(
         messages,
         modelId,
-        apiKey // Pass the determined apiKey (empty for platform-managed)
+        apiKeyFromManager // Pass the API key received from the manager
       );
       
       return { success: true, message: aiResponseMessage };
@@ -65,9 +48,10 @@ export const useAiMessageHandler = ({ getApiKey }: UseAiMessageHandlerProps) => 
       
       const finalErrorDetails = normalizeApiError(err);
       
-      if (finalErrorDetails.type === 'auth' && !finalErrorDetails.data?.provider) {
-        const modelConfig = getModelConfig(modelId);
-        finalErrorDetails.data = { ...finalErrorDetails.data, provider: modelConfig.provider };
+      // Ensure provider information is attached to the error if not already present
+      if (!finalErrorDetails.data?.provider) {
+        const modelConfigForError = getModelConfig(modelId);
+        finalErrorDetails.data = { ...finalErrorDetails.data, provider: modelConfigForError.provider };
       }
       
       setErrorDetails(finalErrorDetails);
@@ -75,7 +59,9 @@ export const useAiMessageHandler = ({ getApiKey }: UseAiMessageHandlerProps) => 
     } finally {
       setIsAiTyping(false);
     }
-  }, [getApiKey]);
+  // chatService should be in dependencies if it's not stable, but it's new ChatService()
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, []); // Removed getApiKey from dependencies as it's no longer used here. Added chatService to dependencies.
 
   return {
     isAiTyping,
