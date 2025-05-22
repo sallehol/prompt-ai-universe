@@ -3,11 +3,15 @@ import { logger } from '@/utils/logger';
 
 // It's good practice to ensure environment variables are handled correctly,
 // especially for URLs. The fallback helps during local development or if the env var is missing.
-const SUPABASE_PROJECT_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://zxpywvtgpfqyazabsvlb.supabase.co';
+// Vite exposes env variables prefixed with VITE_ on import.meta.env
+const SUPABASE_PROJECT_URL = import.meta.env.VITE_NEXT_PUBLIC_SUPABASE_URL || 'https://zxpywvtgpfqyazabsvlb.supabase.co';
 
-if (process.env.NEXT_PUBLIC_SUPABASE_URL !== SUPABASE_PROJECT_URL) {
-  logger.warn(`[apiUtils] NEXT_PUBLIC_SUPABASE_URL is not set or differs from default. Using: ${SUPABASE_PROJECT_URL}`);
+if (import.meta.env.VITE_NEXT_PUBLIC_SUPABASE_URL && import.meta.env.VITE_NEXT_PUBLIC_SUPABASE_URL !== SUPABASE_PROJECT_URL) {
+  logger.warn(`[apiUtils] VITE_NEXT_PUBLIC_SUPABASE_URL is set but differs from the hardcoded fallback. Using: ${SUPABASE_PROJECT_URL}. Ensure your .env file or environment configuration is correct if this is not intended.`);
+} else if (!import.meta.env.VITE_NEXT_PUBLIC_SUPABASE_URL) {
+  logger.warn(`[apiUtils] VITE_NEXT_PUBLIC_SUPABASE_URL is not set. Using default: ${SUPABASE_PROJECT_URL}`);
 }
+
 
 export const API_BASE_PATH = `/functions/v1/ai-proxy`;
 
