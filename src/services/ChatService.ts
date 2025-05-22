@@ -1,9 +1,8 @@
-
 import { Message } from '@/types/chat';
 import { logger } from '@/utils/logger';
 import { getModelConfig, ModelConfig } from '@/config/modelConfig';
 import { supabase } from '@/lib/supabaseClient';
-import { createAuthError } from '@/utils/errorUtils';
+import { createApiError, createAuthError } from '@/utils/errorUtils';
 
 // List of providers for whom the platform manages API keys via subscriptions
 const PLATFORM_MANAGED_PROVIDERS = ['openai', 'anthropic', 'google', 'mistral'];
@@ -74,10 +73,13 @@ export class ChatService {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session?.access_token) {
         logger.error('[ChatService] No active session or token for proxy call.', sessionError);
-        throw createAuthError({ 
-            provider: modelConfig.provider, 
-            message: 'Authentication token is missing or invalid. Please log in again.' 
-        });
+        // Use createApiError for custom auth message
+        throw createApiError(
+            'auth',
+            'Authentication token is missing or invalid. Please log in again.',
+            401,
+            { provider: modelConfig.provider }
+        );
     }
     const accessToken = session.access_token;
 
@@ -86,10 +88,13 @@ export class ChatService {
     // Check for required user-provided API key if not platform managed
     if (modelConfig.requiresApiKey && !isPlatformManaged && !apiKeyFromMessageHandler) {
         logger.error(`[ChatService] User-managed API key required for ${modelConfig.provider} but not provided.`);
-        throw createAuthError({
-            provider: modelConfig.provider,
-            message: `API key for ${modelConfig.provider} is required but not provided/invalid.`
-        });
+        // Use createApiError for custom auth message
+        throw createApiError(
+            'auth',
+            `API key for ${modelConfig.provider} is required but not provided/invalid.`,
+            401,
+            { provider: modelConfig.provider }
+        );
     }
     
     const proxyUrl = new URL('/api/ai-proxy/v1/chat/completions', window.location.origin).toString();
@@ -195,4 +200,3 @@ export class ChatService {
     }
   }
 }
-
