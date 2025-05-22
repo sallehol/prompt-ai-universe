@@ -1,43 +1,44 @@
-
 // supabase/functions/ai-proxy/core/api-key-manager.ts
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { Database } from '../../_shared/database.types.ts' // Assuming you have this type definition
+import { Database } from '../../_shared/database.types.ts'
 
+// Updated to call the get_api_key SQL function and return an object
 export async function selectApiKey(
   supabaseClient: SupabaseClient<Database>,
-  provider: string
-): Promise<string | null> {
-  // Get active key with lowest usage_count
-  const { data, error } = await supabaseClient
-    .from('platform_api_keys')
-    .select('id, key_value, usage_count')
-    .eq('provider', provider)
-    .eq('is_active', true)
-    .order('usage_count', { ascending: true })
-    .limit(1)
-    .single()
+  provider: string,
+  userId: string // Added userId to be passed to the RPC
+): Promise<{ apiKey: string | null; error: string | null }> {
+  try {
+    // Normalize provider name to lowercase to avoid case sensitivity issues.
+    const normalizedProvider = provider.toLowerCase();
 
-  if (error || !data) {
-    console.error(`No active API key found for provider: ${provider}. Error: ${error?.message}`)
-    return null
+    const { data: apiKeyFromRpc, error: rpcError } = await supabaseClient.rpc(
+      'get_api_key',
+      {
+        p_user_id: userId,
+        p_provider: normalizedProvider,
+      }
+    );
+
+    if (rpcError) {
+      console.error(`[selectApiKey] RPC get_api_key error for provider "${normalizedProvider}" and user "${userId}":`, rpcError.message, rpcError.details, rpcError.hint);
+      return { apiKey: null, error: `Failed to retrieve API key due to a database error: ${rpcError.message}` };
+    }
+
+    if (!apiKeyFromRpc) {
+      // This can happen if the SQL function returns NULL (e.g., no active subscription, no key for provider).
+      console.warn(`[selectApiKey] No API key returned by RPC get_api_key for provider "${normalizedProvider}" and user "${userId}". This may be due to an inactive subscription, the key not being found, or the provider name mismatch.`);
+      return { apiKey: null, error: `Platform API key for provider "${provider}" is not available, user subscription may be inactive, or key is not configured for this provider.` };
+    }
+
+    // The SQL function 'get_api_key' already handles incrementing usage_count.
+    return { apiKey: apiKeyFromRpc, error: null };
+
+  } catch (error) {
+    console.error(`[selectApiKey] Unexpected error fetching API key for provider "${provider}" and user "${userId}":`, error.message, error.stack);
+    return { apiKey: null, error: `An unexpected error occurred while retrieving the API key: ${error.message}` };
   }
-
-  // Increment usage_count counter and update last_used_at
-  const { error: updateError } = await supabaseClient
-    .from('platform_api_keys')
-    .update({
-      usage_count: (data.usage_count || 0) + 1,
-      last_used_at: new Date().toISOString(),
-    })
-    .eq('id', data.id)
-
-  if (updateError) {
-    console.error(`Failed to update usage_count for API key ${data.id}: ${updateError.message}`)
-    // Proceeding with the key anyway, as it was successfully retrieved.
-  }
-
-  return data.key_value
 }
 
 export async function recordUsage(
@@ -108,4 +109,3 @@ export async function getRequestTypeFromModel(
 
   return data.model_type
 }
-

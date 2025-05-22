@@ -1,3 +1,4 @@
+
 // supabase/functions/ai-proxy/core/provider-execution/index.ts
 import { SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
 import { ProviderName } from '../../providers/index.ts'
@@ -12,28 +13,32 @@ import { Database } from '../../../_shared/database.types.ts';
 export type { ProviderExecutionResult }; // Re-export for convenience
 
 export async function executeProviderRequest(
-  user: User, // Keep user for potential future use, logging, etc.
+  user: User, 
   supabaseClient: SupabaseClient<Database>,
   provider: ProviderName,
   model: string,
   paramsFromRequest: Record<string, any>, 
-  requestType: 'text' | 'chat', // This might be determined by getRequestTypeFromModel later
+  requestType: 'text' | 'chat', 
   requestId: string
 ): Promise<ProviderExecutionResult> {
-  // 1. Retrieve platform API key
-  const apiKeyResult = await selectApiKey(supabaseClient, provider); // Now returns an object
+  // 1. Retrieve platform API key by calling selectApiKey with userId
+  // The selectApiKey function now calls the get_api_key RPC
+  const apiKeyResult = await selectApiKey(supabaseClient, provider, user.id); 
+  
   if (apiKeyResult.error || !apiKeyResult.apiKey) {
+    const errorMessage = apiKeyResult.error || `Platform API key for ${provider} is not available.`;
+    console.error(`[executeProviderRequest] Error retrieving API key for provider ${provider}, user ${user.id}: ${errorMessage}`);
     return { 
-      // @ts-ignore: errorResponse makes other fields irrelevant
+      // @ts-ignore: errorResponse makes other fields irrelevant, but TS needs all fields if not explicitly typed as a union
       errorResponse: createErrorResponse(
         ErrorType.CONFIGURATION, 
-        apiKeyResult.error || `Platform API key for ${provider} is not available.`,
-        503, 
+        errorMessage,
+        503, // Service Unavailable, as key config is a server-side issue
         provider
       )
     };
   }
-  const apiKey = apiKeyResult.apiKey;
+  const apiKey = apiKeyResult.apiKey; // This is now guaranteed to be a string if no error
 
   // 2. Create provider client
   const client = createProviderClient(provider, apiKey);
@@ -59,3 +64,4 @@ export async function executeProviderRequest(
     return { resultFromClient, finalParamsForProvider };
   }
 }
+
