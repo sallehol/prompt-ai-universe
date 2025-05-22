@@ -2,7 +2,7 @@ import { Message } from '@/types/chat';
 import { logger } from '@/utils/logger';
 import { getModelConfig, ModelConfig } from '@/config/modelConfig';
 import { supabase } from '@/lib/supabaseClient';
-import { createApiError, createAuthError } from '@/utils/errorUtils';
+import { createApiError } from '@/utils/errorUtils';
 
 // List of providers for whom the platform manages API keys via subscriptions
 const PLATFORM_MANAGED_PROVIDERS = ['openai', 'anthropic', 'google', 'mistral'];
@@ -73,7 +73,7 @@ export class ChatService {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session?.access_token) {
         logger.error('[ChatService] No active session or token for proxy call.', sessionError);
-        // Use createApiError for custom auth message
+        // Corrected: Use createApiError with appropriate arguments
         throw createApiError(
             'auth',
             'Authentication token is missing or invalid. Please log in again.',
@@ -88,7 +88,7 @@ export class ChatService {
     // Check for required user-provided API key if not platform managed
     if (modelConfig.requiresApiKey && !isPlatformManaged && !apiKeyFromMessageHandler) {
         logger.error(`[ChatService] User-managed API key required for ${modelConfig.provider} but not provided.`);
-        // Use createApiError for custom auth message
+        // Corrected: Use createApiError with appropriate arguments
         throw createApiError(
             'auth',
             `API key for ${modelConfig.provider} is required but not provided/invalid.`,
