@@ -71,3 +71,19 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+
+## Database Types
+
+To update the database types for Supabase functions, run:
+
+```bash
+npm run gen:types
+```
+
+This will generate the latest TypeScript types based on your Supabase schema. You might need to add the `gen:types` script to your `package.json` first:
+```json
+"scripts": {
+  // ... other scripts
+  "gen:types": "supabase gen types typescript --local > supabase/functions/_shared/database.types.ts"
+}
+```

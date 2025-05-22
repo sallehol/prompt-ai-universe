@@ -1,4 +1,3 @@
-
 // supabase/functions/ai-proxy/core/provider-execution/index.ts
 import { SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
 import { ProviderName } from '../../providers/index.ts'
@@ -7,8 +6,8 @@ import { selectApiKey } from '../api-key-manager.ts'
 import { sendTextRequest, sendChatRequest } from './requestSender.ts'
 import { ProviderExecutionResult } from './interfaces.ts'
 import { createErrorResponse, ErrorType } from '../../error-utils.ts'
-// Updated import path assuming _shared is at the function's build root
-import { Database } from '../../_shared/database.types.ts'; 
+// Updated import path
+import { Database } from '../../../_shared/database.types.ts'; 
 
 export type { ProviderExecutionResult }; // Re-export for convenience
 

@@ -2,8 +2,8 @@
 // supabase/functions/ai-proxy/middleware/logging.ts
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { Middleware, MiddlewareContext } from './index.ts';
-// Updated import path assuming _shared is at the function's build root
-import { Database } from '../_shared/database.types.ts'; 
+// Updated import path
+import { Database } from '../../_shared/database.types.ts'; 
 import { recordUsage } from '../core/api-key-manager.ts';
 import { extractTokenUsage } from '../utils/text-model-utils.ts';
 
