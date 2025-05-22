@@ -1,4 +1,3 @@
-
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { handleCors, verifyAuth, corsHeaders } from './auth.ts' // Keep corsHeaders for top-level errors
@@ -19,6 +18,7 @@ import { RequestOptimizationMiddleware } from './middleware/optimization.ts'
 
 // Import the new router handler
 import { handleApiRequest } from './router/index.ts';
+import { Database } from '../_shared/database.types.ts'; // Added import for Database types
 
 // Initialize middleware chain
 const middlewareChain = new MiddlewareChain();
@@ -38,12 +38,13 @@ serve(async (req: Request) => {
     return new Response(corsResponse.body, {status: corsResponse.status, headers: newCorsHeaders});
   }
   
-  let user, supabaseClient: SupabaseClient;
+  let user; // User type can be inferred or explicitly set if known from verifyAuth
+  let supabaseClient: SupabaseClient<Database>; // Changed to SupabaseClient<Database>
 
   try {
     const authResult = await verifyAuth(req);
     user = authResult.user;
-    supabaseClient = authResult.supabaseClient;
+    supabaseClient = authResult.supabaseClient as SupabaseClient<Database>; // Cast to SupabaseClient<Database>
 
     if (!middlewareInitialized) {
       middlewareChain
@@ -51,7 +52,7 @@ serve(async (req: Request) => {
         .use(new ProviderDetectionMiddleware())
         .use(new CachingMiddleware(supabaseClient))
         .use(new RateLimitingMiddleware(supabaseClient))
-        .use(new UsageLoggingMiddleware(supabaseClient))
+        .use(new UsageLoggingMiddleware(supabaseClient)) // supabaseClient is now SupabaseClient<Database>
         .use(new ErrorHandlingMiddleware()); // Standardizes errors last
       middlewareInitialized = true;
       // console.log(`[${requestId}] Middleware chain initialized.`);
@@ -60,7 +61,7 @@ serve(async (req: Request) => {
     const context: MiddlewareContext = {
       requestId,
       user,
-      supabaseClient,
+      supabaseClient, // This is now SupabaseClient<Database>
       handler: handleApiRequest, // Use the new router handler
       requestStartTime
       // requestPath, requestParams etc. will be populated by middleware/router
@@ -94,4 +95,3 @@ serve(async (req: Request) => {
     return new Response(errorResponse.body, {status: errorResponse.status, headers: newErrorHeaders});
   }
 })
-

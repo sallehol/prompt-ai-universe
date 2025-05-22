@@ -1,4 +1,3 @@
-
 // supabase/functions/ai-proxy/middleware/logging.ts
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { Middleware, MiddlewareContext } from './index.ts';
@@ -10,8 +9,8 @@ import { extractTokenUsage } from '../utils/text-model-utils.ts';
 export class UsageLoggingMiddleware implements Middleware {
   private supabaseClient: SupabaseClient<Database>;
 
-  constructor(supabaseClient: SupabaseClient) {
-    this.supabaseClient = supabaseClient as SupabaseClient<Database>;
+  constructor(supabaseClient: SupabaseClient<Database>) { // Parameter type changed to SupabaseClient<Database>
+    this.supabaseClient = supabaseClient; // Removed cast
   }
 
   async before(req: Request, context: MiddlewareContext): Promise<Request | Response | null> {
@@ -56,7 +55,7 @@ export class UsageLoggingMiddleware implements Middleware {
     try {
       // Use the new recordUsage function
       await recordUsage(
-        this.supabaseClient,
+        this.supabaseClient, // this.supabaseClient is already SupabaseClient<Database>
         context.user.id,
         context.subscriptionId, // Comes from context, set by model-request-processor
         context.requestType,    // Comes from context, set by model-request-processor

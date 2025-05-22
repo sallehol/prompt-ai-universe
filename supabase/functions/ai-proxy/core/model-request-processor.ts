@@ -1,5 +1,5 @@
-
 // supabase/functions/ai-proxy/core/model-request-processor.ts
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'; // Added SupabaseClient import if it wasn't already there explicitly for casting, now for type annotation.
 import { createErrorResponse, ErrorType, handleProviderError } from '../error-utils.ts'
 import { ProviderName } from '../providers/index.ts' 
 import { MiddlewareContext } from '../middleware/index.ts';
@@ -25,14 +25,18 @@ export async function processModelRequest(
     if (validationResult.errorResponse) {
       return validationResult.errorResponse;
     }
+    // supabaseClient from validationResult is now expected to be SupabaseClient<Database>
+    // as context.supabaseClient is SupabaseClient<Database>
     const { user, supabaseClient, provider, model, allParamsFromRequest } = validationResult;
     determinedProvider = provider; 
 
-    const typedSupabaseClient = supabaseClient as SupabaseClient<Database>;
+    // const typedSupabaseClient = supabaseClient as SupabaseClient<Database>; // Cast no longer needed
+    // supabaseClient is already SupabaseClient<Database>
 
     // 1a. Check Subscription Status
-    const subscription: SubscriptionStatus = await checkSubscription(typedSupabaseClient, user.id);
+    const subscription: SubscriptionStatus = await checkSubscription(supabaseClient, user.id); // Use supabaseClient directly
     if (!subscription.active || !subscription.subscriptionId || !subscription.limits || !subscription.availableModels) {
+      // ... keep existing error response code
       return createErrorResponse(
         ErrorType.AUTHORIZATION, // Or FORBIDDEN
         subscription.error || 'No active subscription or subscription data incomplete.',
@@ -43,20 +47,20 @@ export async function processModelRequest(
     }
 
     // 1b. Determine actual requestType based on model from provider_models table
-    const actualRequestType = await getRequestTypeFromModel(typedSupabaseClient, provider, model);
+    const actualRequestType = await getRequestTypeFromModel(supabaseClient, provider, model); // Use supabaseClient directly
     if (!actualRequestType) { // Should have a default from getRequestTypeFromModel
         return createErrorResponse(ErrorType.VALIDATION, `Could not determine request type for model ${model}`, 400, provider);
     }
     // Store actualRequestType and subscriptionId in context if other middleware/handlers need it.
     if (context) {
-      context.requestType = actualRequestType as 'text' | 'chat' | 'image' | 'audio' | 'video' | 'code' | 'website' | 'analysis';
+      context.requestType = actualRequestType as 'text' | 'chat' | 'image' | 'audio' | 'video' | 'code' | 'analysis';
       context.subscriptionId = subscription.subscriptionId;
     }
 
 
     // 1c. Check Usage Limits
     const limitCheck = await checkUsageLimits(
-      typedSupabaseClient,
+      supabaseClient, // Use supabaseClient directly
       user.id,
       subscription.subscriptionId,
       actualRequestType, // Use dynamically determined request type
@@ -67,6 +71,7 @@ export async function processModelRequest(
     );
 
     if (!limitCheck.allowed) {
+      // ... keep existing error response code
       return createErrorResponse(
         ErrorType.RATE_LIMIT, // Or USAGE_LIMIT
         limitCheck.reason || 'Usage limit exceeded.',
@@ -82,29 +87,25 @@ export async function processModelRequest(
     }
 
     // 2. Execute Provider Request
-    // Note: requestType for executeProviderRequest might need to be more specific if not just 'text'/'chat'
-    // For now, assuming 'text' or 'chat' can encompass various model interactions.
-    // If executeProviderRequest needs more specific types, this mapping needs adjustment.
+    // ... keep existing executionRequestType logic
     const executionRequestType = (actualRequestType === 'text' || actualRequestType === 'chat' || actualRequestType === 'code' || actualRequestType === 'analysis') ? actualRequestType : 'chat'; // Default to 'chat' for non-text/code
 
     const executionResult = await executeProviderRequest(
       user,
-      typedSupabaseClient,
+      supabaseClient, // Use supabaseClient directly
       provider,
       model,
       allParamsFromRequest,
-      executionRequestType as 'text' | 'chat', // This needs to align with what executeProviderRequest expects
+      executionRequestType as 'text' | 'chat', 
       requestId
     );
+    // ... keep existing executionResult error check and response processing
     if (executionResult.errorResponse) {
       return executionResult.errorResponse;
     }
     const { resultFromClient, finalParamsForProvider } = executionResult;
     
     // 3. Process Provider Response
-    // The processProviderResponse might also need access to actualRequestType and subscriptionId for usage recording
-    // This can be passed via finalParamsForProvider or context if available there.
-    // For now, assuming it can get what it needs or that usage recording is handled elsewhere (e.g. middleware)
     return await processProviderResponse(
       resultFromClient,
       finalParamsForProvider,
@@ -113,6 +114,7 @@ export async function processModelRequest(
     );
 
   } catch (error) {
+    // ... keep existing error handling
     console.error(`[${requestId}] Error handling model request (provider: ${determinedProvider || 'unknown'}):`, error.message, error.stack);
     
     if (error.message === 'Unauthorized' && !determinedProvider) {
@@ -126,4 +128,3 @@ export async function processModelRequest(
     return createErrorResponse(ErrorType.SERVER, error.message || 'An unexpected error occurred', 500);
   }
 }
-
