@@ -2,8 +2,9 @@
 // supabase/functions/ai-proxy/middleware/logging.ts
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { Middleware, MiddlewareContext } from './index.ts';
-import { Database } from '../../_shared/database.types.ts';
-import { recordUsage } from '../core/api-key-manager.ts'; // New import
+// Updated import path assuming _shared is at the function's build root
+import { Database } from '../_shared/database.types.ts'; 
+import { recordUsage } from '../core/api-key-manager.ts';
 import { extractTokenUsage } from '../utils/text-model-utils.ts';
 
 export class UsageLoggingMiddleware implements Middleware {
@@ -73,4 +74,3 @@ export class UsageLoggingMiddleware implements Middleware {
     return response;
   }
 }
-
