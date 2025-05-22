@@ -74,7 +74,10 @@ export class ChatService {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session?.access_token) {
         logger.error('[ChatService] No active session or token for proxy call.', sessionError);
-        throw createAuthError(modelConfig.provider, 'Authentication token is missing or invalid. Please log in again.');
+        throw createAuthError({ 
+            provider: modelConfig.provider, 
+            message: 'Authentication token is missing or invalid. Please log in again.' 
+        });
     }
     const accessToken = session.access_token;
 
@@ -83,10 +86,10 @@ export class ChatService {
     // Check for required user-provided API key if not platform managed
     if (modelConfig.requiresApiKey && !isPlatformManaged && !apiKeyFromMessageHandler) {
         logger.error(`[ChatService] User-managed API key required for ${modelConfig.provider} but not provided.`);
-        throw createAuthError(
-            modelConfig.provider,
-            `API key for ${modelConfig.provider} is required but not provided/invalid.`
-        );
+        throw createAuthError({
+            provider: modelConfig.provider,
+            message: `API key for ${modelConfig.provider} is required but not provided/invalid.`
+        });
     }
     
     const proxyUrl = new URL('/api/ai-proxy/v1/chat/completions', window.location.origin).toString();
@@ -192,3 +195,4 @@ export class ChatService {
     }
   }
 }
+
