@@ -19,26 +19,58 @@ export class SupabaseCache implements CacheProvider {
   
   // Generate a cache key from request parameters
   static generateCacheKey(provider: string, endpoint: string, params: any): string {
-    // Remove any sensitive information from params
-    const sanitizedParams = { ...params };
-    delete sanitizedParams.api_key; // common variations
-    delete sanitizedParams.apiKey;
-    delete sanitizedParams.Authorization; // header might be passed in params
+    // Deep clone params to avoid modifying the original object.
+    // This is crucial as 'params' might be used later in the request lifecycle.
+    const paramsForCacheKey = JSON.parse(JSON.stringify(params));
 
-    // Sort keys to ensure consistent cache keys
-    const sortedParams = Object.keys(sanitizedParams)
+    // Sanitize common sensitive or unstable top-level keys
+    // These keys should not affect cache uniqueness if their values change.
+    delete paramsForCacheKey.api_key;
+    delete paramsForCacheKey.apiKey;
+    delete paramsForCacheKey.Authorization;
+    delete paramsForCacheKey.user; // Example: if 'user' or 'session_id' is passed
+    delete paramsForCacheKey.session_id;
+    delete paramsForCacheKey.request_id; // Example: a client-side request_id
+    // Add any other top-level keys that are volatile and not relevant to the cacheable content.
+
+    // Normalize 'messages' for chat completion if present
+    if (Array.isArray(paramsForCacheKey.messages)) {
+      paramsForCacheKey.messages = paramsForCacheKey.messages.map((msg: any) => {
+        // Create a new message object containing only cache-relevant fields
+        const normalizedMessage: { role: string; content: any; name?: string } = {
+          role: msg.role,
+          content: msg.content, // Assuming msg.content is typically a string or simple structure.
+                                // If msg.content can be a complex array of blocks (e.g., for multimodal),
+                                // further normalization of msg.content might be needed here to extract
+                                // only the cacheable parts (e.g., text content from text blocks).
+        };
+        // Include 'name' if present, as it's used by some models (e.g., OpenAI for function/tool usage)
+        if (msg.name !== undefined) {
+          normalizedMessage.name = msg.name;
+        }
+        return normalizedMessage; // This strips other fields like id, timestamp, etc., from messages
+      });
+    }
+    
+    // Add some logging to inspect the params being used for key generation
+    // console.log(`[Cache Key Gen] Provider: ${provider}, Endpoint: ${endpoint}`);
+    // console.log(`[Cache Key Gen] Normalized params for key (before sort):`, JSON.stringify(paramsForCacheKey));
+
+    // Sort keys of the processed parameters to ensure consistent cache keys
+    const sortedParams = Object.keys(paramsForCacheKey)
       .sort()
       .reduce((obj: any, key) => {
-        obj[key] = sanitizedParams[key];
+        obj[key] = paramsForCacheKey[key];
         return obj;
       }, {});
     
-    // Create a hash of the parameters (simple stringify for this example)
-    // For more robust hashing, a library could be used if Deno std/crypto is too complex here.
     const paramsString = JSON.stringify(sortedParams);
+    // console.log(`[Cache Key Gen] Final sorted params string for key: ${paramsString}`);
     
-    // Create a cache key
-    return `${provider}:${endpoint}:${paramsString}`; // Consider hashing paramsString for shorter keys if needed
+    const cacheKey = `${provider}:${endpoint}:${paramsString}`;
+    // console.log(`[Cache Key Gen] Generated Cache Key: ${cacheKey}`);
+    
+    return cacheKey;
   }
   
   async get(key: string): Promise<any> {
