@@ -1,3 +1,4 @@
+
 import { Message } from '@/types/chat';
 import { logger } from '@/utils/logger';
 import { getModelConfig, ModelConfig } from '@/config/modelConfig';
@@ -73,7 +74,6 @@ export class ChatService {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session?.access_token) {
         logger.error('[ChatService] No active session or token for proxy call.', sessionError);
-        // Ensure createAuthError can be called with just provider and message
         throw createAuthError(modelConfig.provider, 'Authentication token is missing or invalid. Please log in again.');
     }
     const accessToken = session.access_token;
@@ -83,20 +83,10 @@ export class ChatService {
     // Check for required user-provided API key if not platform managed
     if (modelConfig.requiresApiKey && !isPlatformManaged && !apiKeyFromMessageHandler) {
         logger.error(`[ChatService] User-managed API key required for ${modelConfig.provider} but not provided.`);
-        const errorText = `Error: API key for ${modelConfig.provider} is required but not provided/invalid.`;
-        return {
-          id: Date.now().toString() + '_ai_error',
-          role: 'assistant',
-          content: errorText,
-          timestamp: Date.now(),
-          isSaved: false,
-          status: 'error',
-          metadata: {
-            model: model,
-            provider: modelConfig.provider,
-            error: { type: 'auth', message: errorText }
-          },
-        };
+        throw createAuthError(
+            modelConfig.provider,
+            `API key for ${modelConfig.provider} is required but not provided/invalid.`
+        );
     }
     
     const proxyUrl = new URL('/api/ai-proxy/v1/chat/completions', window.location.origin).toString();
@@ -114,6 +104,8 @@ export class ChatService {
     if (modelConfig.requiresApiKey && !isPlatformManaged && apiKeyFromMessageHandler) {
         headers['X-API-Key'] = apiKeyFromMessageHandler;
         logger.log(`[ChatService] Forwarding user-provided API key in X-API-Key header for ${modelConfig.provider}`);
+    } else if (isPlatformManaged) {
+        logger.log(`[ChatService] Using platform-managed API key for ${modelConfig.provider} via proxy.`);
     }
 
     try {
