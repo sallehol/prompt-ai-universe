@@ -1,103 +1,76 @@
 
 // supabase/functions/ai-proxy/middleware/logging.ts
-import { Middleware, MiddlewareContext } from './index.ts';
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SupabaseUsageLogger } from '../monitoring.ts';
+import { Middleware, MiddlewareContext } from './index.ts';
+import { Database } from '../../_shared/database.types.ts';
+import { recordUsage } from '../core/api-key-manager.ts'; // New import
+import { extractTokenUsage } from '../utils/text-model-utils.ts';
 
 export class UsageLoggingMiddleware implements Middleware {
-  private usageLogger: SupabaseUsageLogger;
-  
+  private supabaseClient: SupabaseClient<Database>;
+
   constructor(supabaseClient: SupabaseClient) {
-    this.usageLogger = new SupabaseUsageLogger(supabaseClient);
+    this.supabaseClient = supabaseClient as SupabaseClient<Database>;
   }
-  
-  async before(req: Request, context: MiddlewareContext): Promise<void> {
-    // context.requestStartTime is set by main serve() function now.
-    // No specific action needed in 'before' for logging itself,
-    // but good place for initial log if desired.
-    // const { requestId } = context;
-    // console.log(`[${requestId}] UsageLoggingMiddleware.before: Request received.`);
+
+  async before(req: Request, context: MiddlewareContext): Promise<Request | Response | null> {
+    // console.log(`[${context.requestId}] UsageLoggingMiddleware: Before - Path: ${context.requestPath}`);
+    return null; // No action before, but could initialize timers or grab initial state
   }
-  
-  async after(req: Request, res: Response, context: MiddlewareContext): Promise<void> {
-    const { requestId } = context;
-    if (!context.user || !context.user.id) {
-      // console.warn(`[${requestId}] UsageLoggingMiddleware: No user ID, skipping log.`);
-      return;
-    }
-    if (!context.requestStartTime) {
-        console.warn(`[${requestId}] UsageLoggingMiddleware: requestStartTime not set in context. Log might be incomplete.`);
-    }
 
-    const userId = context.user.id;
-    // Provider should be set by ProviderDetectionMiddleware
-    const providerForLog = context.provider || 'unknown_provider_log';
-    let modelForLog = 'unknown_model_log';
+  async after(response: Response, context: MiddlewareContext): Promise<Response> {
+    // console.log(`[${context.requestId}] UsageLoggingMiddleware: After - Path: ${context.requestPath}, Status: ${response.status}`);
     
-    // requestParams should be populated by RequestOptimizationMiddleware or other preceding middleware
-    if (context.requestParams && context.requestParams.model) {
-        modelForLog = context.requestParams.model;
+    if (!context.user || !context.provider || !context.model || !context.allParamsFromRequest || !context.subscriptionId || !context.requestType) {
+      // console.warn(`[${context.requestId}] UsageLoggingMiddleware: Missing context for usage logging. Skipping.`);
+      return response;
     }
 
-    const url = new URL(req.url);
-    const pathParts = url.pathname.split('/').filter(Boolean);
-    const aiProxyPathIndex = pathParts.findIndex(p => p === 'ai-proxy');
-    // endpoint is like 'models/text/completion' or 'image/generation'
-    const endpoint = pathParts.slice(aiProxyPathIndex + 2).join('/');
+    let responseBodyClone = null;
+    let responseBodyForLogging = {}; // Default to empty object
+    let inputTokens = 0;
+    let outputTokens = 0;
 
+    // Only attempt to parse JSON if it's likely a JSON response and successful
+    const contentType = response.headers.get('content-type');
+    if (response.ok && contentType && contentType.includes('application/json')) {
+      try {
+        responseBodyClone = response.clone(); // Clone for logging, original response stream is consumed once
+        responseBodyForLogging = await responseBodyClone.json();
 
-    // responseBody should be populated by CachingMiddleware or MiddlewareChain (for successful JSON)
-    // errorDetails should be populated by middleware returning errors or by MiddlewareChain for handler errors
-    let responseBodyToLog = context.responseBody;
-    let errorDetailsToLog = context.errorDetails;
+        // Extract token usage from response body (specific to provider/model structure)
+        const usage = extractTokenUsage(responseBodyForLogging, context.provider);
+        inputTokens = usage.inputTokens;
+        outputTokens = usage.outputTokens;
 
-    const contentType = res.headers.get('Content-Type');
-    const isStreamingResponse = contentType?.includes('text/event-stream');
-
-    // If not a 200 response, and errorDetails not yet set, try to parse from response.
-    // This might be redundant if ErrorHandlingMiddleware already parsed it.
-    if (res.status !== 200 && !errorDetailsToLog) {
-        try {
-            const clonedRes = res.clone(); // Safe to clone, body might be read by ErrorHandlingMiddleware
-            errorDetailsToLog = await clonedRes.json();
-        } catch (e) {
-            // Fallback if parsing fails
-            errorDetailsToLog = { status: res.status, message: res.statusText || "Failed to parse error response body for logging" };
-        }
-    } else if (res.status === 200 && !responseBodyToLog && !isStreamingResponse) {
-         // If successful JSON and not streaming, and body not in context, try to parse.
-         // This might be redundant if MiddlewareChain (for handler) or CachingMiddleware already parsed it.
-         try {
-            const clonedRes = res.clone();
-            responseBodyToLog = await clonedRes.json();
-        } catch (e) { 
-            // console.warn(`[${requestId}] UsageLoggingMiddleware: Could not parse success JSON response for logging.`);
-            // If parsing fails, bodyToLog might remain undefined, which is acceptable for logging.
-        }
+      } catch (e) {
+        console.error(`[${context.requestId}] UsageLoggingMiddleware: Error parsing response JSON for logging:`, e.message);
+        // responseBodyForLogging remains {}
+      }
+    } else if (!response.ok) {
+        // console.log(`[${context.requestId}] UsageLoggingMiddleware: Response not OK or not JSON, basic logging.`);
     }
-    
-    if (isStreamingResponse) {
-        responseBodyToLog = { note: "Streaming response, body not logged in detail." };
-    }
-    
-    const durationMs = context.requestStartTime ? Date.now() - context.requestStartTime : -1;
-    // console.log(`[${requestId}] UsageLoggingMiddleware.after: Logging request. Duration: ${durationMs}ms`);
+
 
     try {
-      await this.usageLogger.logRequest(
-        userId,
-        providerForLog as string,
-        modelForLog,
-        endpoint,
-        context.requestParams || {note: "No JSON body or params not applicable"},
-        res.status,
-        responseBodyToLog, 
-        errorDetailsToLog,
-        durationMs, // Add duration
-        requestId // Add requestId
+      // Use the new recordUsage function
+      await recordUsage(
+        this.supabaseClient,
+        context.user.id,
+        context.subscriptionId, // Comes from context, set by model-request-processor
+        context.requestType,    // Comes from context, set by model-request-processor
+        context.provider,
+        context.model,
+        inputTokens,
+        outputTokens
       );
-    } catch (error) {
-      console.error(`[${requestId}] UsageLoggingMiddleware.after (logRequest) error:`, error.message);
+      // console.log(`[${context.requestId}] Usage recorded successfully for ${context.provider}:${context.model}.`);
+    } catch (dbError) {
+      console.error(`[${context.requestId}] UsageLoggingMiddleware: Database error recording usage:`, dbError.message, dbError.stack);
     }
+    
+    // Return the original response, not the clone used for logging
+    return response;
   }
 }
+

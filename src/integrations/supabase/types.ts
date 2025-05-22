@@ -177,6 +177,316 @@ export type Database = {
         }
         Relationships: []
       }
+      model_categories: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          display_name: string
+          icon: string | null
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          display_name: string
+          icon?: string | null
+          id?: string
+          name: string
+          sort_order: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          display_name?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      platform_api_keys: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          key_value: string
+          last_used_at: string | null
+          notes: string | null
+          provider: string
+          rate_limit: number | null
+          updated_at: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          key_value: string
+          last_used_at?: string | null
+          notes?: string | null
+          provider: string
+          rate_limit?: number | null
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          key_value?: string
+          last_used_at?: string | null
+          notes?: string | null
+          provider?: string
+          rate_limit?: number | null
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
+      provider_models: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          model_id: string
+          model_name: string
+          model_type: string
+          pricing_input: number | null
+          pricing_output: number | null
+          provider: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          model_id: string
+          model_name: string
+          model_type: string
+          pricing_input?: number | null
+          pricing_output?: number | null
+          provider: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          model_id?: string
+          model_name?: string
+          model_type?: string
+          pricing_input?: number | null
+          pricing_output?: number | null
+          provider?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      provider_rate_limits: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          provider: string
+          requests_per_day: number
+          requests_per_minute: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          provider: string
+          requests_per_day: number
+          requests_per_minute: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          provider?: string
+          requests_per_day?: number
+          requests_per_minute?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      stripe_customers: {
+        Row: {
+          created_at: string | null
+          customer_id: string
+          email: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id: string
+          email?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string
+          email?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      subscription_plans: {
+        Row: {
+          available_models: Json
+          created_at: string | null
+          description: string | null
+          features: Json
+          id: string
+          limits: Json
+          name: string
+          price_monthly: number
+          price_yearly: number
+          stripe_monthly_price_id: string | null
+          stripe_yearly_price_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          available_models: Json
+          created_at?: string | null
+          description?: string | null
+          features: Json
+          id: string
+          limits: Json
+          name: string
+          price_monthly: number
+          price_yearly: number
+          stripe_monthly_price_id?: string | null
+          stripe_yearly_price_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          available_models?: Json
+          created_at?: string | null
+          description?: string | null
+          features?: Json
+          id?: string
+          limits?: Json
+          name?: string
+          price_monthly?: number
+          price_yearly?: number
+          stripe_monthly_price_id?: string | null
+          stripe_yearly_price_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean | null
+          created_at: string | null
+          current_period_end: string
+          current_period_start: string
+          id: string
+          payment_provider: string
+          payment_provider_subscription_id: string | null
+          plan_id: string
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end: string
+          current_period_start: string
+          id?: string
+          payment_provider: string
+          payment_provider_subscription_id?: string | null
+          plan_id: string
+          status: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end?: string
+          current_period_start?: string
+          id?: string
+          payment_provider?: string
+          payment_provider_subscription_id?: string | null
+          plan_id?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      usage_records: {
+        Row: {
+          cost_usd: number | null
+          id: string
+          model: string
+          provider: string
+          request_timestamp: string | null
+          request_type: string
+          subscription_id: string
+          tokens_input: number | null
+          tokens_output: number | null
+          user_id: string
+        }
+        Insert: {
+          cost_usd?: number | null
+          id?: string
+          model: string
+          provider: string
+          request_timestamp?: string | null
+          request_type: string
+          subscription_id: string
+          tokens_input?: number | null
+          tokens_output?: number | null
+          user_id: string
+        }
+        Update: {
+          cost_usd?: number | null
+          id?: string
+          model?: string
+          provider?: string
+          request_timestamp?: string | null
+          request_type?: string
+          subscription_id?: string
+          tokens_input?: number | null
+          tokens_output?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_records_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
