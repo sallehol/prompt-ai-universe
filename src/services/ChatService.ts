@@ -3,6 +3,7 @@ import { logger } from '@/utils/logger';
 import { getModelConfig, ModelConfig } from '@/config/modelConfig';
 import { supabase } from '@/lib/supabaseClient';
 import { createApiError } from '@/utils/errorUtils';
+import { getApiEndpoint } from '@/utils/apiUtils'; // Import the new utility
 
 // List of providers for whom the platform manages API keys via subscriptions
 const PLATFORM_MANAGED_PROVIDERS = ['openai', 'anthropic', 'google', 'mistral'];
@@ -63,7 +64,7 @@ export class ChatService {
         timestamp: Date.now(),
         isSaved: false,
         status: 'complete',
-        metadata: { model: model, provider: modelConfig.provider },
+        metadata: { model: model, provider: modelConfig.provider, simulated: true },
       };
     }
 
@@ -73,7 +74,6 @@ export class ChatService {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session?.access_token) {
         logger.error('[ChatService] No active session or token for proxy call.', sessionError);
-        // Corrected: Use createApiError with appropriate arguments
         throw createApiError(
             'auth',
             'Authentication token is missing or invalid. Please log in again.',
@@ -88,7 +88,6 @@ export class ChatService {
     // Check for required user-provided API key if not platform managed
     if (modelConfig.requiresApiKey && !isPlatformManaged && !apiKeyFromMessageHandler) {
         logger.error(`[ChatService] User-managed API key required for ${modelConfig.provider} but not provided.`);
-        // Corrected: Use createApiError with appropriate arguments
         throw createApiError(
             'auth',
             `API key for ${modelConfig.provider} is required but not provided/invalid.`,
@@ -97,7 +96,9 @@ export class ChatService {
         );
     }
     
-    const proxyUrl = new URL('/api/ai-proxy/v1/chat/completions', window.location.origin).toString();
+    // Updated proxyUrl using the new utility function
+    const proxyUrl = getApiEndpoint('CHAT_COMPLETION');
+    logger.log(`[ChatService] Using proxy URL: ${proxyUrl}`);
     
     const requestBody = {
         model: model, // The modelId
@@ -148,26 +149,22 @@ export class ChatService {
         let responseId = Date.now().toString() + '_ai';
 
         // Standardized extraction based on common provider patterns
-        // The proxy should ideally standardize this further, but this is a client-side attempt.
         if (result.choices && result.choices[0] && result.choices[0].message && typeof result.choices[0].message.content === 'string') { // OpenAI, Mistral
             aiContent = result.choices[0].message.content;
             usageData = result.usage;
             if(result.id) responseId = result.id;
         } else if (result.content && Array.isArray(result.content) && result.content[0]?.type === 'text' && typeof result.content[0].text === 'string') { // Anthropic
             aiContent = result.content[0].text;
-            usageData = result.usage; // Anthropic specific usage structure
+            usageData = result.usage; 
             if(result.id) responseId = result.id;
         } else if (result.candidates && result.candidates[0]?.content?.parts && Array.isArray(result.candidates[0].content.parts)) { // Google
             aiContent = result.candidates[0].content.parts.map((p: any) => p.text || '').join("");
-            // Google usage is often separate or needs specific calculation. Placeholder:
-            // usageData = result.usageMetadata || { promptTokenCount: 0, candidatesTokenCount: 0 };
-            if(result.id) responseId = result.id; // Google often doesn't return a top-level ID in this way
+            if(result.id) responseId = result.id; 
         } else {
             logger.warn(`[ChatService] Unhandled or unexpected response structure from provider ${modelConfig.provider}:`, result);
-            // Fallback attempts
             if (typeof result.text === 'string') aiContent = result.text;
             else if (typeof result.completion === 'string') aiContent = result.completion;
-            else if (typeof result.content === 'string') aiContent = result.content; // Generic content field
+            else if (typeof result.content === 'string') aiContent = result.content; 
         }
         
         logger.log(`[ChatService] Real API call successful for model ${model}. Provider: ${modelConfig.provider}`);
@@ -188,10 +185,10 @@ export class ChatService {
 
     } catch (error: any) {
         logger.error(`[ChatService] Error during real API call processing for model ${model}:`, error);
-        if (error.type && error.message) { // If it's already one of our structured errors
+        if (error.type && error.message) { 
             throw error;
         }
-        throw { // Wrap unexpected errors
+        throw { 
             type: 'server',
             message: error.message || 'Failed to communicate with AI service due to an unexpected error.',
             status: error.status || 500,
