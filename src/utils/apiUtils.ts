@@ -1,9 +1,9 @@
 
 import { logger } from '@/utils/logger';
-import { supabase } from '@/lib/supabaseClient'; // Import supabaseClient
+import { supabaseUrl } from '@/lib/supabaseClient'; // Import the exported supabaseUrl
 
-// Get the URL directly from supabaseClient to ensure consistency
-const SUPABASE_PROJECT_URL = supabase.supabaseUrl;
+// Get the URL directly from supabaseClient module to ensure consistency
+const SUPABASE_PROJECT_URL = supabaseUrl;
 
 logger.log(`[apiUtils] Using Supabase URL: ${SUPABASE_PROJECT_URL}`);
 
