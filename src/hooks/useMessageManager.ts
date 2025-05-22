@@ -6,7 +6,7 @@ import { useApiKeys } from './useApiKeys';
 import { useAiMessageHandler } from './useAiMessageHandler';
 import { useSessionMessageOperations } from './useSessionMessageOperations';
 import { getModelConfig } from '@/config/modelConfig';
-import { createAuthError } from '@/utils/errorUtils'; // For creating auth errors
+import { createAuthError, createApiError, normalizeApiError } from '@/utils/errorUtils'; // Added createApiError & normalizeApiError
 
 type UpdateSessionsFn = (updater: (prevSessions: Session[]) => Session[]) => void;
 
@@ -16,7 +16,6 @@ interface UseMessageManagerProps {
   updateAndPersistSessions: UpdateSessionsFn;
 }
 
-// This list is needed for API key logic now shifted here
 const PLATFORM_MANAGED_PROVIDERS = ['openai', 'anthropic', 'google', 'mistral'];
 
 export const useMessageManager = ({
@@ -30,9 +29,9 @@ export const useMessageManager = ({
     isAiTyping, 
     isError, 
     errorDetails, 
-    sendMessageToAi, // This function's signature has changed
+    sendMessageToAi,
     resetErrorState
-  } = useAiMessageHandler(/* getApiKey is no longer passed here */); 
+  } = useAiMessageHandler(); 
   
   const {
     addMessageToSession,
@@ -62,9 +61,8 @@ export const useMessageManager = ({
     
     const userMessage = createNewMessage(text, 'user');
     addMessageToSession(activeSessionId, userMessage);
-    resetErrorState(); // Reset error state before new attempt
+    resetErrorState();
 
-    // API Key Logic moved here
     const modelConfig = getModelConfig(currentSession.modelUsed);
     const isPlatformManaged = PLATFORM_MANAGED_PROVIDERS.includes(modelConfig.provider.toLowerCase());
     let apiKey = '';
@@ -75,7 +73,6 @@ export const useMessageManager = ({
         logger.warn(`[useMessageManager] User-provided API key for ${modelConfig.provider} not found.`);
         const authError = createAuthError(modelConfig.provider);
         addErrorMessageToSession(activeSessionId, authError);
-        // Add simulated response as fallback due to auth error preventing actual call
         const simulatedMessage = createNewMessage(
           `[Simulated response] API key for ${modelConfig.displayName} is missing. Please configure it in settings. This is a simulated response.`,
           'assistant'
@@ -85,12 +82,11 @@ export const useMessageManager = ({
         return;
       }
     } else if (modelConfig.requiresApiKey && isPlatformManaged) {
-      apiKey = ''; // Proxy handles platform keys
+      apiKey = ''; 
     }
-    // End of API Key Logic
-
+    
     const result = await sendMessageToAi(
-      currentSession.messages, // Make sure this is up-to-date if messages were added
+      currentSession.messages, 
       currentSession.modelUsed,
       apiKey // Pass the determined apiKey
     );
@@ -99,22 +95,21 @@ export const useMessageManager = ({
       addMessageToSession(activeSessionId, result.message);
     } else if (!result.success && result.error) {
       addErrorMessageToSession(activeSessionId, result.error);
-      // Fallback mechanism: add a simulated response
       logger.log(`[useMessageManager] AI call failed. Adding simulated response. Error:`, result.error.message);
       const simulatedMessageContent = `[Simulated response] I'm sorry, but I couldn't connect to the AI service (${modelConfig.displayName}). This is a simulated response. Reason: ${result.error.message}`;
       const simulatedMessage = createNewMessage(simulatedMessageContent, 'assistant');
-      simulatedMessage.metadata = { model: currentSession.modelUsed, provider: modelConfig.provider, simulated: true, error: result.error };
+      simulatedMessage.metadata = { model: currentSession.modelUsed, provider: modelConfig.provider, simulated: true, error: { type: result.error.type, message: result.error.message } };
       addMessageToSession(activeSessionId, simulatedMessage);
     }
   }, [
     activeSessionId, 
     persistedSessions, 
     isApiKeysLoaded, 
-    getApiKey, // Added getApiKey
     addMessageToSession,
     sendMessageToAi,
     resetErrorState,
-    addErrorMessageToSession
+    addErrorMessageToSession,
+    getApiKey // Added getApiKey
   ]);
 
   const retryLastMessage = useCallback(() => {
@@ -134,16 +129,14 @@ export const useMessageManager = ({
     const messageData = findMessageToRegenerate(messageIdToRegenerate);
     if (!messageData || !activeSessionId) return;
     
-    // Destructure based on the updated findMessageToRegenerate return type
     const { userPromptMessage, modelId, messageIndexOfAiResponse, historyForResend } = messageData; 
     
     let userPromptText = "";
     if (typeof userPromptMessage.content === 'string') {
       userPromptText = userPromptMessage.content;
-    } else if (Array.isArray(userPromptMessage.content) && userPromptMessage.content.length > 0 && typeof userPromptMessage.content[0] === 'string') { // Assuming text parts are strings
-      userPromptText = userPromptMessage.content[0]; // if content is string[]
+    } else if (Array.isArray(userPromptMessage.content) && userPromptMessage.content.length > 0 && typeof userPromptMessage.content[0] === 'string') {
+      userPromptText = userPromptMessage.content[0];
     } else if (Array.isArray(userPromptMessage.content) && userPromptMessage.content.length > 0 && userPromptMessage.content[0].type === 'text') {
-       // For complex content like [{ type: 'text', content: 'Hello' }]
       userPromptText = (userPromptMessage.content[0] as { type: 'text', content: string }).content;
     }
     
@@ -154,9 +147,8 @@ export const useMessageManager = ({
     truncateSessionToMessage(messageIndexOfAiResponse); 
     resetErrorState();
     
-    // API Key Logic for regeneration
     const isPlatformManaged = PLATFORM_MANAGED_PROVIDERS.includes(modelConfig.provider.toLowerCase());
-    let apiKeyForRegen = '';
+    let apiKeyForRegen = ''; // Changed from apiKey to apiKeyForRegen to avoid conflict
     if (modelConfig.requiresApiKey && !isPlatformManaged) {
       apiKeyForRegen = getApiKey(modelConfig.provider);
       if (!apiKeyForRegen) {
@@ -174,11 +166,12 @@ export const useMessageManager = ({
     } else if (modelConfig.requiresApiKey && isPlatformManaged) {
       apiKeyForRegen = '';
     }
-    // End API Key Logic for regeneration
 
-    // Real regeneration call to sendMessageToAi
-    // historyForResend should contain messages up to the point of regeneration
-    const result = await sendMessageToAi(historyForResend, modelId, apiKeyForRegen);
+    const result = await sendMessageToAi(
+      historyForResend, 
+      modelId, 
+      apiKeyForRegen // Pass apiKeyForRegen
+    );
 
     if (result.success && result.message) {
       addMessageToSession(activeSessionId, result.message);
@@ -188,7 +181,7 @@ export const useMessageManager = ({
       logger.log(`[useMessageManager] regenerateResponse: AI call failed. Adding simulated response. Error:`, result.error.message);
       const simulatedMessageContent = `[Simulated response] I'm sorry, but I couldn't regenerate the response from ${modelConfig.displayName}. Reason: ${result.error.message}`;
       const simulatedMessage = createNewMessage(simulatedMessageContent, 'assistant');
-      simulatedMessage.metadata = { model: modelId, provider: modelConfig.provider, simulated: true, error: result.error };
+      simulatedMessage.metadata = { model: modelId, provider: modelConfig.provider, simulated: true, error: { type: result.error.type, message: result.error.message } };
       addMessageToSession(activeSessionId, simulatedMessage);
     }
   }, [
@@ -197,9 +190,9 @@ export const useMessageManager = ({
     truncateSessionToMessage,
     resetErrorState,
     addMessageToSession,
-    sendMessageToAi, // Added for real regeneration
-    getApiKey, // Added for API key logic
-    addErrorMessageToSession // Added for error handling
+    sendMessageToAi,
+    getApiKey, // Added getApiKey
+    addErrorMessageToSession
   ]);
 
   return {

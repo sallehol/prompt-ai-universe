@@ -16,6 +16,7 @@ export interface Message {
   metadata?: {
     model?: string;
     provider?: string; // e.g., 'openai', 'anthropic'
+    simulated?: boolean; // Add this property
     usage?: {
       prompt_tokens?: number;
       completion_tokens?: number;

@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabaseClient';
 import type { ApiError } from '@/api/types/apiError';
 import { normalizeApiError } from '@/utils/errorUtils';
@@ -78,7 +79,7 @@ export class BaseApiClient {
           logger.log(`[BaseApiClient] Error response text:`, errorText);
           
           if (errorText.trim().startsWith('<!DOCTYPE') || errorText.trim().startsWith('<html')) {
-            logger.error('[BaseApiClient] Received HTML instead of JSON. Endpoint may not exist or server error occurred.');
+            logger.error('[BaseApiClient] Received HTML instead of JSON. The endpoint may not exist or a server error occurred.');
             errorData = { 
               message: 'Server returned HTML instead of JSON. The endpoint may not exist or a server error occurred.',
               originalHtml: errorText.substring(0, 200) + '...'
