@@ -1,10 +1,10 @@
-
 import { Message } from '@/types/chat';
 import { logger } from '@/utils/logger';
-import { getModelConfig } from '@/config/modelConfig'; // Import the new config utility
+import { getModelConfig, ModelConfig } from '@/config/modelConfig';
+import { supabase } from '@/lib/supabaseClient';
+import { createAuthError } from '@/utils/errorUtils';
 
 // List of providers for whom the platform manages API keys via subscriptions
-// This should be consistent with useAiMessageHandler.ts
 const PLATFORM_MANAGED_PROVIDERS = ['openai', 'anthropic', 'google', 'mistral'];
 
 // Updated getProviderFromModel function
@@ -24,20 +24,17 @@ export class ChatService {
   }
 
   async sendMessage(
-    _messages: Message[], // Current conversation history
-    model: string, // This is the modelId
-    _apiKey: string // API key, may or may not be used depending on modelConfig
-  ): Promise<Message> { // Should return the AI's response as a Message object
-    logger.log(`[ChatService] sendMessage called with model: ${model}, apiKey provided: ${!!_apiKey}`);
+    messages: Message[],
+    model: string,
+    apiKeyFromMessageHandler: string
+  ): Promise<Message> {
+    logger.log(`[ChatService] sendMessage called with model: ${model}, apiKeyProvidedToService: ${!!apiKeyFromMessageHandler}`);
     
     const modelConfig = getModelConfig(model);
-    const isPlatformManaged = PLATFORM_MANAGED_PROVIDERS.includes(modelConfig.provider.toLowerCase());
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Simulate different responses based on model or for testing
+    // Handle specific test models first
     if (model === 'error_model_test') {
+      logger.warn(`[ChatService] Triggering simulated server error for model: ${model}`);
       throw {
         type: 'server',
         message: 'Simulated server error from the API.',
@@ -45,64 +42,161 @@ export class ChatService {
       };
     }
     if (model === 'auth_error_test') {
+      logger.warn(`[ChatService] Triggering simulated auth error for model: ${model}`);
         throw {
           type: 'auth',
           message: 'Simulated authentication error: Invalid API Key.',
           status: 401,
-          data: { provider: 'test_auth_provider' } // Example provider for test auth error
+          data: { provider: 'test_auth_provider' }
         };
     }
 
-    let aiResponseText = `Simulated response from ${modelConfig.displayName} (${modelConfig.provider}) to user.`;
-    
-    // This error condition should only apply if:
-    // 1. The model requires an API key.
-    // 2. It's NOT a platform-managed provider (meaning the user should provide the key).
-    // 3. No API key was actually provided by the user.
-    // 4. It's not an explicitly simulated or unknown provider (which might have different key handling).
-    if (modelConfig.requiresApiKey && !isPlatformManaged && !_apiKey && modelConfig.provider !== 'simulated' && modelConfig.provider !== 'unknown_provider') {
-        logger.error(`[ChatService] sendMessage called for model ${model} which requires a user-provided API key, but none was provided or it's invalid.`);
-        aiResponseText = `Error: API key for ${modelConfig.provider} is required but not provided/invalid. (Simulated error message from ChatService for user-provided key)`;
-         return {
+    // If the model is configured to be explicitly simulated (e.g., 'simulated-echo-model')
+    if (modelConfig.isSimulated) {
+      logger.log(`[ChatService] Using EXPLICITLY SIMULATED response for model: ${model}`);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay
+      const simulatedResponseText = `Simulated response from ${modelConfig.displayName} (${modelConfig.provider}) because modelConfig.isSimulated is true.`;
+      return {
+        id: Date.now().toString() + '_ai_simulated',
+        role: 'assistant',
+        content: simulatedResponseText,
+        timestamp: Date.now(),
+        isSaved: false,
+        status: 'complete',
+        metadata: { model: model, provider: modelConfig.provider },
+      };
+    }
+
+    // --- Attempt REAL API call via proxy ---
+    logger.log(`[ChatService] Attempting REAL API call via proxy for model: ${model}`);
+
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.access_token) {
+        logger.error('[ChatService] No active session or token for proxy call.', sessionError);
+        // Ensure createAuthError can be called with just provider and message
+        throw createAuthError(modelConfig.provider, 'Authentication token is missing or invalid. Please log in again.');
+    }
+    const accessToken = session.access_token;
+
+    const isPlatformManaged = PLATFORM_MANAGED_PROVIDERS.includes(modelConfig.provider.toLowerCase());
+
+    // Check for required user-provided API key if not platform managed
+    if (modelConfig.requiresApiKey && !isPlatformManaged && !apiKeyFromMessageHandler) {
+        logger.error(`[ChatService] User-managed API key required for ${modelConfig.provider} but not provided.`);
+        const errorText = `Error: API key for ${modelConfig.provider} is required but not provided/invalid.`;
+        return {
           id: Date.now().toString() + '_ai_error',
           role: 'assistant',
-          content: aiResponseText,
+          content: errorText,
           timestamp: Date.now(),
           isSaved: false,
           status: 'error',
           metadata: {
             model: model,
             provider: modelConfig.provider,
-            error: { type: 'auth', message: aiResponseText }
+            error: { type: 'auth', message: errorText }
           },
         };
     }
     
-    // If the execution reaches here, it's either:
-    // - A model that doesn't require a key.
-    // - A platform-managed model (where an empty _apiKey is fine for the frontend).
-    // - A user-managed model where the key was provided.
-    // - A simulated/unknown provider.
-    // In all these cases (for the simulator), we proceed to give a simulated success response.
+    const proxyUrl = new URL('/api/ai-proxy/v1/chat/completions', window.location.origin).toString();
     
-    logger.log(`[ChatService] Simulation successful for model ${model}. isPlatformManaged: ${isPlatformManaged}`);
-
-    return {
-      id: Date.now().toString() + '_ai',
-      role: 'assistant',
-      content: aiResponseText,
-      timestamp: Date.now(),
-      isSaved: false,
-      status: 'complete',
-      metadata: {
-        model: model,
-        provider: modelConfig.provider, // Use provider from config
-        usage: { // Simulated usage
-          prompt_tokens: 10,
-          completion_tokens: 20,
-          total_tokens: 30,
-        },
-      },
+    const requestBody = {
+        model: model, // The modelId
+        messages: messages,
     };
+
+    const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+    };
+
+    if (modelConfig.requiresApiKey && !isPlatformManaged && apiKeyFromMessageHandler) {
+        headers['X-API-Key'] = apiKeyFromMessageHandler;
+        logger.log(`[ChatService] Forwarding user-provided API key in X-API-Key header for ${modelConfig.provider}`);
+    }
+
+    try {
+        const response = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(requestBody),
+        });
+
+        const responseBody = await response.text(); // Read body once
+
+        if (!response.ok) {
+            let errorData;
+            try {
+                errorData = JSON.parse(responseBody);
+            } catch (e) {
+                errorData = { error: { message: responseBody || response.statusText } };
+            }
+            logger.error(`[ChatService] Proxy call failed for model ${model}: ${response.status}`, errorData);
+            throw {
+                type: errorData.error?.type || 'api_error', // More specific than 'server' if possible
+                message: errorData.error?.message || `AI service request failed: ${response.statusText}`,
+                status: response.status,
+                data: errorData.error?.data || { provider: modelConfig.provider, errorCode: errorData.error?.errorCode }
+            };
+        }
+
+        const result = JSON.parse(responseBody);
+        
+        let aiContent = "Error: Could not parse AI response content.";
+        let usageData;
+        let responseId = Date.now().toString() + '_ai';
+
+        // Standardized extraction based on common provider patterns
+        // The proxy should ideally standardize this further, but this is a client-side attempt.
+        if (result.choices && result.choices[0] && result.choices[0].message && typeof result.choices[0].message.content === 'string') { // OpenAI, Mistral
+            aiContent = result.choices[0].message.content;
+            usageData = result.usage;
+            if(result.id) responseId = result.id;
+        } else if (result.content && Array.isArray(result.content) && result.content[0]?.type === 'text' && typeof result.content[0].text === 'string') { // Anthropic
+            aiContent = result.content[0].text;
+            usageData = result.usage; // Anthropic specific usage structure
+            if(result.id) responseId = result.id;
+        } else if (result.candidates && result.candidates[0]?.content?.parts && Array.isArray(result.candidates[0].content.parts)) { // Google
+            aiContent = result.candidates[0].content.parts.map((p: any) => p.text || '').join("");
+            // Google usage is often separate or needs specific calculation. Placeholder:
+            // usageData = result.usageMetadata || { promptTokenCount: 0, candidatesTokenCount: 0 };
+            if(result.id) responseId = result.id; // Google often doesn't return a top-level ID in this way
+        } else {
+            logger.warn(`[ChatService] Unhandled or unexpected response structure from provider ${modelConfig.provider}:`, result);
+            // Fallback attempts
+            if (typeof result.text === 'string') aiContent = result.text;
+            else if (typeof result.completion === 'string') aiContent = result.completion;
+            else if (typeof result.content === 'string') aiContent = result.content; // Generic content field
+        }
+        
+        logger.log(`[ChatService] Real API call successful for model ${model}. Provider: ${modelConfig.provider}`);
+
+        return {
+            id: responseId,
+            role: 'assistant',
+            content: aiContent,
+            timestamp: Date.now(),
+            isSaved: false,
+            status: 'complete',
+            metadata: {
+                model: model,
+                provider: modelConfig.provider,
+                usage: usageData,
+            },
+        };
+
+    } catch (error: any) {
+        logger.error(`[ChatService] Error during real API call processing for model ${model}:`, error);
+        if (error.type && error.message) { // If it's already one of our structured errors
+            throw error;
+        }
+        throw { // Wrap unexpected errors
+            type: 'server',
+            message: error.message || 'Failed to communicate with AI service due to an unexpected error.',
+            status: error.status || 500,
+            data: { provider: modelConfig.provider }
+        };
+    }
   }
 }
