@@ -3,7 +3,7 @@ import { logger } from '@/utils/logger';
 import { getModelConfig, ModelConfig } from '@/config/modelConfig';
 import { supabase } from '@/lib/supabaseClient';
 import { createApiError } from '@/utils/errorUtils';
-import { getApiEndpoint } from '@/utils/apiUtils'; // Import the new utility
+// import { getApiEndpoint } from '@/utils/apiUtils'; // Temporarily commented out for direct URL debugging
 
 // List of providers for whom the platform manages API keys via subscriptions
 const PLATFORM_MANAGED_PROVIDERS = ['openai', 'anthropic', 'google', 'mistral'];
@@ -96,9 +96,10 @@ export class ChatService {
         );
     }
     
-    // Updated proxyUrl using the new utility function
-    const proxyUrl = getApiEndpoint('CHAT_COMPLETION');
-    logger.log(`[ChatService] Using proxy URL: ${proxyUrl}`);
+    // Temporarily use direct URL for debugging
+    // const proxyUrl = getApiEndpoint('CHAT_COMPLETION'); 
+    const proxyUrl = `https://zxpywvtgpfqyazabsvlb.supabase.co/functions/v1/ai-proxy/api/models/chat/completion`;
+    logger.log(`[ChatService] Using direct proxy URL for debugging: ${proxyUrl}`);
     
     const requestBody = {
         model: model, // The modelId
@@ -118,13 +119,18 @@ export class ChatService {
     }
 
     try {
+        logger.log(`[ChatService] Sending request to: ${proxyUrl} with headers:`, Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== 'authorization'))); // Log headers, obscuring Authorization
+
         const response = await fetch(proxyUrl, {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(requestBody),
+            mode: 'cors', // Add mode for CORS handling
+            credentials: 'include' // Add credentials for CORS handling
         });
 
-        const responseBody = await response.text(); // Read body once
+        logger.log(`[ChatService] Response status: ${response.status}, statusText: ${response.statusText}`);
+        const responseBody = await response.text(); 
 
         if (!response.ok) {
             let errorData;
@@ -135,7 +141,7 @@ export class ChatService {
             }
             logger.error(`[ChatService] Proxy call failed for model ${model}: ${response.status}`, errorData);
             throw {
-                type: errorData.error?.type || 'api_error', // More specific than 'server' if possible
+                type: errorData.error?.type || 'api_error',
                 message: errorData.error?.message || `AI service request failed: ${response.statusText}`,
                 status: response.status,
                 data: errorData.error?.data || { provider: modelConfig.provider, errorCode: errorData.error?.errorCode }
@@ -184,14 +190,20 @@ export class ChatService {
         };
 
     } catch (error: any) {
+        logger.error(`[ChatService] Fetch error name: ${error.name}, message: ${error.message}`);
+        if (error.cause) logger.error(`[ChatService] Error cause:`, error.cause);
+        if (error instanceof TypeError && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+            logger.error(`[ChatService] Network error - check if the URL (${proxyUrl}) is correct, the server is running, and CORS is configured correctly on the server.`);
+        }
+        
         logger.error(`[ChatService] Error during real API call processing for model ${model}:`, error);
         if (error.type && error.message) { 
             throw error;
         }
         throw { 
-            type: 'server',
+            type: 'server', // Consider 'network' or 'client_fetch_error' if more specific
             message: error.message || 'Failed to communicate with AI service due to an unexpected error.',
-            status: error.status || 500,
+            status: error.status || 500, // May not have a status from client-side fetch error
             data: { provider: modelConfig.provider }
         };
     }
