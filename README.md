@@ -74,7 +74,7 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-trick
 
 ## Database Types
 
-To update the database types for Supabase functions, run:
+To update the database types for Supabase functions, run;
 
 ```bash
 npm run gen:types
